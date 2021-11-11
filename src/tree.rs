@@ -63,8 +63,6 @@ impl Tree {
             entries.push(entry);
         }
 
-        entries.sort();
-
         let entries_data = util::get_data(&mut entries)?;
 
         let length = entries_data.len();
