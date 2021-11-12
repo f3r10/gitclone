@@ -1,7 +1,7 @@
 use anyhow::Result;
 use data_encoding::HEXLOWER;
 use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY};
-use std::{fmt::Display, fs, os::unix::prelude::MetadataExt, path::PathBuf};
+use std::{fmt::Display, fs::{self, Metadata}, os::unix::prelude::MetadataExt, path::PathBuf};
 
 use crate::{Entry, Tree};
 
@@ -115,6 +115,11 @@ pub fn print_tree(tree: Tree) -> () {
 pub fn read_file(path: PathBuf) -> Result<Vec<u8>> {
     let res = fs::read(path)?;
     Ok(res)
+}
+
+pub fn stat_file(path: PathBuf) -> Result<Metadata> {
+    let metadata = fs::metadata(path)?;
+    Ok(metadata)
 }
 
 fn is_executable(entry: &PathBuf) -> Result<bool> {

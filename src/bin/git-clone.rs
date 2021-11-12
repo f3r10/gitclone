@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::Local;
-use gitclone::{Author, Commit, Object, Refs};
+use gitclone::{Author, Blob, Commit, Index, Object, Refs, util};
 use gitclone::{Database, Workspace};
 use std::path::Path;
 use std::{env::current_dir, fs};
@@ -27,6 +27,13 @@ fn main() -> Result<()> {
                 .arg(Arg::from_usage("--author=[author] 'The name of the author'").required(false))
                 .arg(Arg::from_usage("--email=[email] 'The email of the author'").required(false)),
         )
+        .subcommand(
+            SubCommand::with_name("add").arg(
+                Arg::with_name("FILE")
+                    .help("the FILE to add into the index")
+                    .required(false),
+            ),
+        )
         .get_matches();
     match matches.subcommand() {
         ("init", Some(_matches)) => {
@@ -43,6 +50,27 @@ fn main() -> Result<()> {
                         "Initialized empty Jit repository in: {:?}",
                         git_path.to_str()
                     );
+                }
+                Err(e) => {
+                    println!("Error: {}", e);
+                }
+            }
+        }
+        ("add", Some(_matches)) => {
+            let path = _matches
+                .value_of("FILE")
+                .map(|v| Path::new(v)).expect("it is necessary to add a file");
+            let root_path = current_dir();
+            match root_path {
+                Ok(root_path) => {
+                    let workspace = Workspace::new(&root_path);
+                    let database = Database::new(&workspace.get_db_path());
+                    let mut index = Index::new(workspace.get_git_path().join("index"));
+                    let stat = util::stat_file(path.clone().canonicalize()?)?;
+                    let blob = Blob::new(path.clone().canonicalize()?)?;
+                    database.store(&blob)?;
+                    index.add(path.clone().to_path_buf(), blob.get_oid().to_string(), stat)?;
+                    index.write_updates()?;
                 }
                 Err(e) => {
                     println!("Error: {}", e);

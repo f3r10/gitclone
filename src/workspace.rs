@@ -47,7 +47,7 @@ impl Workspace {
     pub fn persist_tree(&self, tree: &Tree, db: &Database) -> Result<()> {
         db.store(tree)?;
         for entry in &tree.entries {
-            match entry.clone() {
+            match entry {
                 TreeEntry::TreeLeaf{entry: e, name: _} => {
                     db.store(&e.blob)?
                 }
