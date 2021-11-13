@@ -6,9 +6,9 @@ use anyhow::Result;
 use crate::{Object, util};
 
 
-#[derive(Eq, Clone, PartialEq, PartialOrd)]
+#[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
 pub struct Blob {
-    pathbuf: PathBuf,
+    pub pathbuf: PathBuf,
     type_: String,
     oid: String,
     content: Vec<u8>,

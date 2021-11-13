@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::fs::Metadata;
 use std::fs::OpenOptions;
@@ -10,7 +11,10 @@ use crate::util;
 pub struct Index {
     pathname: PathBuf,
     entries: HashMap<String, Entry>,
+    keys: BTreeSet<String>
 }
+
+#[derive(Clone)]
 struct Entry {
     ctime: u32,
     ctime_nsec: u32,
@@ -81,6 +85,10 @@ impl Entry {
         };
         Ok(entry)
     }
+
+    fn key(self) -> String {
+        self.path
+    }
 }
 
 impl Index {
@@ -88,14 +96,22 @@ impl Index {
         Index {
             pathname,
             entries: HashMap::new(),
+            keys: BTreeSet::new()
         }
     }
 
     pub fn add(&mut self, pathname: PathBuf, oid: String, stat: Metadata) -> Result<()> {
-        let path = pathname.to_str().unwrap();
+        // let path = pathname.to_str().unwrap();
         let entry = Entry::create(pathname.clone(), oid, stat)?;
-        self.entries.insert(path.to_string(), entry);
+        self.keys.insert(entry.clone().key());
+        self.entries.insert(entry.clone().key(), entry);
         Ok(())
+    }
+
+    fn each_entry(&self) -> Result<Vec<&Entry>> {
+        let mut entries: Vec<&Entry> = Vec::new();
+        self.keys.iter().for_each(|k| entries.push(self.entries.get(k).unwrap()));
+        Ok(entries)
     }
 
     pub fn write_updates(&self) -> Result<()> {
@@ -105,9 +121,10 @@ impl Index {
         data.extend_from_slice("DIRC".as_bytes());
         data.extend_from_slice(&mode.to_be_bytes());
         data.extend_from_slice(&len.to_be_bytes());
-        self.entries.iter().for_each(|(_, v)| {
+        let entries = self.each_entry()?;
+        for v in entries {
             data.extend_from_slice(&v.get_data().unwrap());
-        });
+        }
         let oid = util::hexdigest(&data);
         let mut data_to_write = data;
         let oid = hex::decode(oid)?;

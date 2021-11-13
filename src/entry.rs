@@ -7,7 +7,7 @@ use crate::{
     Blob, Object, Tree,
 };
 
-#[derive(Eq, Clone, PartialEq, PartialOrd)]
+#[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
 pub struct Entry {
     pub name: String,
     pub oid: String,

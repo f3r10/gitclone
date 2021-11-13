@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::Local;
-use gitclone::{Author, Blob, Commit, Index, Object, Refs, util};
+use gitclone::{Author, Commit, Index, Object, Refs};
 use gitclone::{Database, Workspace};
 use std::path::Path;
 use std::{env::current_dir, fs};
@@ -31,7 +31,8 @@ fn main() -> Result<()> {
             SubCommand::with_name("add").arg(
                 Arg::with_name("FILE")
                     .help("the FILE to add into the index")
-                    .required(false),
+                    .required(false)
+                    .multiple(true),
             ),
         )
         .get_matches();
@@ -57,19 +58,17 @@ fn main() -> Result<()> {
             }
         }
         ("add", Some(_matches)) => {
-            let path = _matches
-                .value_of("FILE")
-                .map(|v| Path::new(v)).expect("it is necessary to add a file");
+            let inputs = _matches
+                .values_of("FILE").unwrap();
+            let paths = inputs.map(|v| Path::new(v).to_path_buf()).collect();
             let root_path = current_dir();
             match root_path {
                 Ok(root_path) => {
                     let workspace = Workspace::new(&root_path);
-                    let database = Database::new(&workspace.get_db_path());
+                    let db = Database::new(&workspace.get_db_path());
                     let mut index = Index::new(workspace.get_git_path().join("index"));
-                    let stat = util::stat_file(path.clone().canonicalize()?)?;
-                    let blob = Blob::new(path.clone().canonicalize()?)?;
-                    database.store(&blob)?;
-                    index.add(path.clone().to_path_buf(), blob.get_oid().to_string(), stat)?;
+                    let tree = workspace.build_add_tree(paths)?;
+                    workspace.create_index_entry(&tree, &db, &mut index)?;
                     index.write_updates()?;
                 }
                 Err(e) => {
@@ -93,7 +92,7 @@ fn main() -> Result<()> {
             match root_path {
                 Ok(root_path) => {
                     let workspace = Workspace::new(&root_path);
-                    let ( tree, root_oid ) = workspace.build_root_tree()?;
+                    let ( tree, root_oid ) = workspace.build_root_tree(None)?;
                     let database = Database::new(&workspace.get_db_path());
                     let refs = Refs::new(&workspace.get_git_path());
                     let parent = refs.read_head();

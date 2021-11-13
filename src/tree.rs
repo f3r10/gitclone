@@ -7,7 +7,7 @@ use crate::{
 use core::fmt;
 use std::{fmt::Display, fs, path::PathBuf};
 
-#[derive(Eq, Clone, PartialEq, PartialOrd)]
+#[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
 pub struct Tree {
     pub entries: Vec<TreeEntry>,
     pub parent: PathBuf,

@@ -5,7 +5,7 @@ use std::{fmt::Display, fs::{self, Metadata}, os::unix::prelude::MetadataExt, pa
 
 use crate::{Entry, Tree};
 
-#[derive(Eq, Clone, PartialEq, PartialOrd)]
+#[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
 pub enum TreeEntry {
     TreeBranch { tree: Tree, name: String },
     TreeLeaf { entry: Entry, name: String },
