@@ -1,9 +1,6 @@
 use anyhow::Result;
 
-use crate::{
-    util::{self, TreeEntry},
-    Entry, Object,
-};
+use crate::{Database, Entry, util::{self, TreeEntry}};
 use core::fmt;
 use std::{fmt::Display, fs, path::PathBuf};
 
@@ -13,39 +10,19 @@ pub struct Tree {
     pub parent: PathBuf,
     type_: String,
     pub oid: String,
-    pub data_to_write: Vec<u8>,
-}
-
-impl Object for Tree {
-    fn get_data(&self) -> Vec<u8> {
-        self.data_to_write.clone()
-    }
-
-    fn type_(&self) -> &str {
-        &self.type_
-    }
-
-    // fn set_oid(&mut self, oid: String) {
-    //     self.oid = oid;
-    // }
-
-    fn get_oid(&self) -> &str {
-        &self.oid
-    }
 }
 
 impl Tree {
-    pub fn new(entries: Vec<TreeEntry>, parent: PathBuf, oid: String, content: Vec<u8>) -> Self {
+    pub fn new(entries: Vec<TreeEntry>, parent: PathBuf, oid: String) -> Self {
         Tree {
             entries,
             type_: "tree".to_string(),
             oid,
             parent,
-            data_to_write: content,
         }
     }
 
-    pub fn build(pathbuf: PathBuf) -> Result<TreeEntry> {
+    pub fn build(pathbuf: PathBuf, db: &Database) -> Result<TreeEntry> {
         let mut paths: Vec<PathBuf> = Vec::new();
 
         let mut dir = fs::read_dir(pathbuf.clone())?;
@@ -58,7 +35,7 @@ impl Tree {
         }
         let mut entries: Vec<TreeEntry> = Vec::new();
         for path in paths {
-            let entry = Entry::build(path)?;
+            let entry = Entry::build(path, db)?;
 
             entries.push(entry);
         }
@@ -79,15 +56,15 @@ impl Tree {
 
         let oid = util::hexdigest(&data_to_write);
 
-        let t = Tree {
+        db.write_object(oid.clone(), data_to_write)?;
+        let tp = Tree{
             entries,
             type_: "tree".to_string(),
             oid,
             parent: pathbuf.clone(),
-            data_to_write,
         };
         let tree = TreeEntry::TreeBranch {
-            tree: t,
+            tree: tp,
             name: pathbuf
                 .file_name()
                 .expect("unable to get filename")

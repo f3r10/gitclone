@@ -2,10 +2,7 @@ use std::{fmt::Display, fs, path::PathBuf};
 
 use anyhow::Result;
 
-use crate::{
-    util::{self, TreeEntry},
-    Blob, Object, Tree,
-};
+use crate::{Blob, Database, Object, Tree, util::{self, TreeEntry}};
 
 #[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
 pub struct Entry {
@@ -13,7 +10,7 @@ pub struct Entry {
     pub oid: String,
     pub mode: String,
     pub path: Option<PathBuf>,
-    pub blob: Blob,
+    // pub blob: Blob,
 }
 
 impl Entry {
@@ -26,11 +23,12 @@ impl Entry {
     //     }
     // }
 
-    pub fn build(path: PathBuf) -> Result<TreeEntry> {
+    pub fn build(path: PathBuf, db: &Database) -> Result<TreeEntry> {
         let metadata = fs::metadata(&path)?;
         let filetype = metadata.file_type();
         if filetype.is_file() {
             let blob = Blob::new(path.clone())?;
+            db.write_object(blob.get_oid().to_string(), blob.get_data())?;
             let e = Entry {
                 name: path
                     .file_name()
@@ -41,7 +39,7 @@ impl Entry {
                 oid: blob.clone().get_oid().to_string(),
                 mode: util::get_mode(path.to_path_buf())?,
                 path: Some(path.to_path_buf()),
-                blob,
+                // blob,
             };
             let entry = TreeEntry::TreeLeaf {
                 entry: e,
@@ -54,7 +52,7 @@ impl Entry {
             };
             Ok(entry)
         } else {
-            Tree::build(path.clone())
+            Tree::build(path.clone(), db)
         }
     }
 

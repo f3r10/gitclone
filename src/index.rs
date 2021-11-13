@@ -75,7 +75,7 @@ impl Entry {
             mtime_nsec: stat.mtime_nsec() as u32,
             dev: stat.dev() as u32,
             ino: stat.ino() as u32,
-            mode: mode,
+            mode,
             uid: stat.uid() as u32,
             gid: stat.gid() as u32,
             size: stat.size() as u32,

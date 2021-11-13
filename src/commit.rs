@@ -19,10 +19,6 @@ impl Object for Commit {
         &self.type_
     }
 
-    // fn set_oid(&mut self, oid: String) {
-    //     self.oid = oid;
-    // }
-
     fn get_oid(&self) -> &str {
         &self.oid
     }

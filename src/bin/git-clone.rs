@@ -67,7 +67,7 @@ fn main() -> Result<()> {
                     let workspace = Workspace::new(&root_path);
                     let db = Database::new(&workspace.get_db_path());
                     let mut index = Index::new(workspace.get_git_path().join("index"));
-                    let tree = workspace.build_add_tree(paths)?;
+                    let tree = workspace.build_add_tree(paths, &db)?;
                     workspace.create_index_entry(&tree, &db, &mut index)?;
                     index.write_updates()?;
                 }
@@ -92,11 +92,10 @@ fn main() -> Result<()> {
             match root_path {
                 Ok(root_path) => {
                     let workspace = Workspace::new(&root_path);
-                    let ( tree, root_oid ) = workspace.build_root_tree(None)?;
                     let database = Database::new(&workspace.get_db_path());
+                    let ( _, root_oid ) = workspace.build_root_tree(None, &database)?;
                     let refs = Refs::new(&workspace.get_git_path());
                     let parent = refs.read_head();
-                    workspace.persist_tree(&tree, &database)?;
                     let current_time = Local::now();
                     let author = Author::new(author, email, current_time);
                     let commit = Commit::new(

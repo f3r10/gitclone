@@ -25,7 +25,7 @@ impl Database {
         self.write_object(object.get_oid().to_string(), data)
     }
 
-    fn write_object(&self, oid: String, content: Vec<u8>) -> Result<()> {
+    pub fn write_object(&self, oid: String, content: Vec<u8>) -> Result<()> {
         let (a, b) = oid.split_at(2);
         let path = &self.pathname.join(a);
         if !path.exists() {
