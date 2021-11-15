@@ -1,17 +1,30 @@
+use std::char;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::fs::File;
 use std::fs::Metadata;
 use std::fs::OpenOptions;
 use std::{io::Write, os::unix::prelude::MetadataExt, path::PathBuf, u16, u8, usize};
+use anyhow::anyhow;
+use byteorder::{BigEndian, ReadBytesExt};
 
 use anyhow::Result;
 
+use crate::Checksum;
 use crate::util;
 
+// #[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug)]
+struct Header<'a> {
+    signature: &'a str,
+    version: i32,
+    count: i32,
+}
 pub struct Index {
     pathname: PathBuf,
     entries: HashMap<String, Entry>,
-    keys: BTreeSet<String>
+    keys: BTreeSet<String>,
+    changed: bool
 }
 
 #[derive(Clone)]
@@ -26,7 +39,7 @@ struct Entry {
     uid: u32,
     gid: u32,
     size: u32,
-    oid: String,
+    oid: Vec<u8>,
     flags: u16,
     path: String,
 }
@@ -39,7 +52,6 @@ const MAX_PATH_SIZE: u16 = 0xfff;
 impl Entry {
     fn get_data(&self) -> Result<Vec<u8>> {
         let mut data = Vec::new();
-        let oid = hex::decode(&self.oid.clone())?;
         data.extend_from_slice(&self.ctime.to_be_bytes());
         data.extend_from_slice(&self.ctime_nsec.to_be_bytes());
         data.extend_from_slice(&self.mtime.to_be_bytes());
@@ -50,7 +62,7 @@ impl Entry {
         data.extend_from_slice(&self.uid.to_be_bytes());
         data.extend_from_slice(&self.gid.to_be_bytes());
         data.extend_from_slice(&self.size.to_be_bytes());
-        data.extend_from_slice(&oid);
+        data.extend_from_slice(&self.oid);
         data.extend_from_slice(&self.flags.to_be_bytes());
         data.extend_from_slice(&self.path.as_bytes());
         data.push(0x00);
@@ -61,6 +73,7 @@ impl Entry {
     }
 
     fn create(pathname: PathBuf, oid: String, stat: Metadata) -> Result<Self> {
+        let oid = hex::decode(oid)?;
         let path = pathname.to_str().unwrap();
         let mode = if (stat.mode() & 0o001) != 0 {
             EXECUTABLE_MODE
@@ -89,22 +102,111 @@ impl Entry {
     fn key(self) -> String {
         self.path
     }
+
+    fn parse(entry: Vec<u8>) -> Result<Entry> {
+        let mut stats = Vec::new();
+        let ( numbers_vec, tail ) = entry.split_at(40);
+        let (oid, tail) = tail.split_at(20);
+        let oid = oid.to_vec();
+        let (mut flag_vec, path_vec) = tail.split_at(2);
+        let path = String::from_utf8(path_vec.to_vec())?.trim_matches(char::from(0)).to_string();
+        let flags = flag_vec.read_u16::<BigEndian>()?;
+        for mut chunk in numbers_vec.chunks_exact(4) {
+            stats.push(chunk.read_u32::<BigEndian>()?)
+        }
+        let e = Entry{
+            ctime: stats[0],
+            ctime_nsec: stats[1],
+            mtime: stats[2],
+            mtime_nsec: stats[3],
+            dev: stats[4],
+            ino: stats[5],
+            mode: stats[6],
+            uid: stats[7],
+            gid: stats[8],
+            size: stats[9],
+            path,
+            oid,
+            flags,
+        };
+        Ok(e)
+    }
 }
 
+const HEADER_SIZE: usize = 12;
+const SIGNATURE: &str = "DIRC";
+const VERSION: u32 = 2;
+const ENTRY_MIN_SIZE: usize = 64; 
 impl Index {
     pub fn new(pathname: PathBuf) -> Self {
         Index {
             pathname,
             entries: HashMap::new(),
-            keys: BTreeSet::new()
+            keys: BTreeSet::new(),
+            changed: false
         }
+    }
+
+    fn clear(&mut self) -> Result<()> {
+        self.entries = HashMap::new();
+        self.keys = BTreeSet::new();
+        self.changed = false;
+        Ok(())
+    }
+
+    pub fn load(&mut self) -> Result<()> {
+        self.clear()?;
+        let mut reader = Checksum::new(File::open(&self.pathname)?);
+        let count = &self.read_header(&mut reader)?;
+        self.read_entries(&mut reader, *count)?;
+        reader.verify_checksum()?;
+        println!("count files index: {:?}", count);
+        Ok(())
+    }
+
+    pub fn read_entries(&mut self, reader: &mut Checksum, count: u32) -> Result<()> {
+        for _ in 0..count {
+            let mut entry = reader.read(ENTRY_MIN_SIZE, true)?;
+            while *entry.last().unwrap() != 0u8 {
+                entry.extend_from_slice(&reader.read(ENTRY_BLOCK, true)?)
+            }
+            self.store_entry(Entry::parse(entry)?)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn read_header(&self, reader: &mut Checksum) -> Result<u32> {
+        let data = reader.read(HEADER_SIZE, true)?;
+        let mut chunks: Vec<_> = data.chunks_exact(4).collect();
+        let signature = String::from_utf8(chunks[0].to_vec())?;
+        let version = chunks[1].read_u32::<BigEndian>()?;
+        let count = chunks[2].read_u32::<BigEndian>()?;
+        //NOTE The cast from slice to array is more difficult that it looks like.
+        // https://stackoverflow.com/questions/25428920/how-to-get-a-slice-as-an-array-in-rust
+        // println!("data2: {:?}", u32::from_be_bytes(t1[..]));
+        // println!("data2: {:?}", BigEndian::read_u32(&chunks[1][..]));
+        if signature != SIGNATURE {
+            return Err(anyhow!(format!("Signature: expected: {} but found {}", SIGNATURE, signature)))
+        }
+        if version != VERSION {
+            return Err(anyhow!(format!("Version: expected: {} but found {}", VERSION, version)))
+        }
+        Ok(count)
+    }
+
+    fn store_entry(&mut self, entry: Entry) -> Result<()> {
+        //TODO find a better way that cloning the entry
+        self.keys.insert(entry.clone().key());
+        self.entries.insert(entry.clone().key(), entry);
+        Ok(())
     }
 
     pub fn add(&mut self, pathname: PathBuf, oid: String, stat: Metadata) -> Result<()> {
         // let path = pathname.to_str().unwrap();
         let entry = Entry::create(pathname.clone(), oid, stat)?;
-        self.keys.insert(entry.clone().key());
-        self.entries.insert(entry.clone().key(), entry);
+        self.store_entry(entry)?;
+        self.changed = true;
         Ok(())
     }
 

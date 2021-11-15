@@ -67,6 +67,7 @@ fn main() -> Result<()> {
                     let workspace = Workspace::new(&root_path);
                     let db = Database::new(&workspace.get_db_path());
                     let mut index = Index::new(workspace.get_git_path().join("index"));
+                    index.load()?;
                     let tree = workspace.build_add_tree(paths, &db)?;
                     workspace.create_index_entry(&tree, &db, &mut index)?;
                     index.write_updates()?;
