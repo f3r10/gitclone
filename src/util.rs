@@ -248,3 +248,17 @@ pub fn hexdigest(data: &Vec<u8>) -> String {
 
     HEXLOWER.encode(digest.as_ref())
 }
+
+pub fn encode_vec(data: &Vec<u8>) -> String {
+    HEXLOWER.encode(data)
+}
+
+pub fn hexdigest_vec(data: &Vec<u8>) -> Vec<u8> {
+    let mut context = Context::new(&SHA1_FOR_LEGACY_USE_ONLY);
+
+    context.update(&data);
+
+    let digest = context.finish();
+
+    digest.as_ref().to_vec()
+}

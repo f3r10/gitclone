@@ -1,9 +1,8 @@
 use anyhow::Result;
 use anyhow::anyhow;
 use chrono::Local;
-use gitclone::{Author, Commit, EntryAdd, Index, Object, Refs, util};
+use gitclone::{Author, Commit, Index, Object, Refs, util};
 use gitclone::{Database, Workspace};
-use std::collections::HashMap;
 use std::path::Path;
 use std::{env::current_dir, fs};
 
@@ -121,14 +120,14 @@ fn main() -> Result<()> {
                     let parent = refs.read_head();
                     let current_time = Local::now();
                     let author = Author::new(author, email, current_time);
-                    let commit = Commit::new(
+                    let mut commit = Commit::new(
                         root_oid.to_string(),
                         author,
                         message.to_string(),
                         parent.clone(),
                     );
-                    database.store(&commit)?;
-                    refs.update_head(commit.get_oid().to_string())?;
+                    database.store(&mut commit)?;
+                    refs.update_head(util::encode_vec(&commit.get_oid()?))?;
                     let is_root = if parent.is_none() {
                         "(root-commit)"
                     } else {

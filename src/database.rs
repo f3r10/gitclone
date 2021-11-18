@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::Object;
+use crate::{Object, util};
 
 pub struct Database {
     pathname: PathBuf,
@@ -20,9 +20,9 @@ impl Database {
         }
     }
 
-    pub fn store(&self, object: &dyn Object) -> Result<()> {
-        let data = object.get_data();
-        self.write_object(object.get_oid().to_string(), data)
+    pub fn store(&self, object: &mut dyn Object) -> Result<()> {
+        let data = object.get_data()?;
+        self.write_object(util::encode_vec(&object.get_oid()?), data)
     }
 
     pub fn write_object(&self, oid: String, content: Vec<u8>) -> Result<()> {

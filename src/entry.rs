@@ -1,4 +1,4 @@
-use std::{fmt::Display, fs::{self, DirEntry}, path::PathBuf};
+use std::{fmt::Display, fs::{self}, path::PathBuf};
 
 use anyhow::Result;
 
@@ -35,7 +35,7 @@ impl Entry {
                         .to_str()
                         .expect("invalid filename")
                         .to_string(),
-                        oid: blob.clone().get_oid().to_string(),
+                        oid: util::encode_vec(&blob.clone().get_oid()?),
                         mode: util::get_mode(entry.path.to_path_buf())?,
                         path: Some(entry.path.to_path_buf()),
                         // blob,
@@ -61,8 +61,9 @@ impl Entry {
         let metadata = fs::metadata(&path)?;
         let filetype = metadata.file_type();
         if filetype.is_file() {
-            let blob = Blob::new(path.clone())?;
-            db.write_object(blob.get_oid().to_string(), blob.get_data())?;
+            let mut blob = Blob::new(path.clone())?;
+            db.store(&mut blob)?;
+            // db.write_object(util::encode_vec(&blob.get_oid()?), blob.get_data()?)?;
             let e = Entry {
                 name: path
                     .file_name()
@@ -70,10 +71,9 @@ impl Entry {
                     .to_str()
                     .expect("invalid filename")
                     .to_string(),
-                oid: blob.clone().get_oid().to_string(),
+                oid: util::encode_vec(&blob.clone().get_oid()?),
                 mode: util::get_mode(path.to_path_buf())?,
                 path: Some(path.to_path_buf()),
-                // blob,
             };
             let entry = TreeEntry::TreeLeaf {
                 entry: e,
