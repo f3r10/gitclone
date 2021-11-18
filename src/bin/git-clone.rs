@@ -1,7 +1,7 @@
-use anyhow::Result;
 use anyhow::anyhow;
+use anyhow::Result;
 use chrono::Local;
-use gitclone::{Author, Commit, Index, Object, Refs, util};
+use gitclone::{util, Author, Commit, Index, Object, Refs};
 use gitclone::{Database, Workspace};
 use std::path::Path;
 use std::{env::current_dir, fs};
@@ -59,8 +59,7 @@ fn main() -> Result<()> {
             }
         }
         ("add", Some(_matches)) => {
-            let inputs = _matches
-                .values_of("FILE").unwrap();
+            let inputs = _matches.values_of("FILE").unwrap();
             let paths = inputs.map(|v| Path::new(v).to_path_buf()).collect();
             let root_path = current_dir();
             match root_path {
@@ -105,42 +104,40 @@ fn main() -> Result<()> {
                         return Err(anyhow!("Unable to commit if there is not a index file"));
                     }
                     let entries = index.each_entry()?;
-                    // let entries_paths: Vec<_> = 
-                    //     entries.into_iter().map(|e| e.path.to_path_buf()).collect();
-                    // let tree = workspace.build_tree(entries_paths.clone(), &database)?;
                     let root = workspace.create_tree_from_index(entries)?;
-                    let tree = workspace.build_add_tree(root, &database)?;
-                    println!("root_oid: {:?}", tree.oid);
-                    // println!("t: {:?}", t)
-                    // println!("tree: {:?}", tree);
-                    // for e in  entries_paths {
-                    //     println!("entries to commit: {:?}, dir {:?}, parent: {:?} ", e, e.is_dir(), e.parent());
-                    // }
-                    //
-                    // let ( _, root_oid ) = workspace.build_root_tree(None, &database)?;
-                    let refs = Refs::new(&workspace.get_git_path());
-                    let parent = refs.read_head();
-                    let current_time = Local::now();
-                    let author = Author::new(author, email, current_time);
-                    let mut commit = Commit::new(
-                        util::encode_vec(&tree.oid),
-                        author,
-                        message.to_string(),
-                        parent.clone(),
-                    );
-                    database.store(&mut commit)?;
-                    refs.update_head(util::encode_vec(&commit.get_oid()?))?;
-                    let is_root = if parent.is_none() {
-                        "(root-commit)"
-                    } else {
-                        ""
-                    };
-                    println!(
-                        "[{} {:?}] {:?}",
-                        is_root,
-                        &commit.get_oid(),
-                        message.lines().next()
-                    )
+                    let mut tree = workspace.build_add_tree(root, &database)?;
+                    tree.save_tree(&database)?;
+                    match tree.oid {
+                        Some(oid) => {
+                            let refs = Refs::new(&workspace.get_git_path());
+                            let parent = refs.read_head();
+                            let current_time = Local::now();
+                            let author = Author::new(author, email, current_time);
+                            let mut commit = Commit::new(
+                                util::encode_vec(&oid),
+                                author,
+                                message.to_string(),
+                                parent.clone(),
+                            );
+                            database.store(&mut commit)?;
+                            refs.update_head(util::encode_vec(&commit.get_oid()?))?;
+                            let is_root = if parent.is_none() {
+                                "(root-commit)"
+                            } else {
+                                ""
+                            };
+                            println!(
+                                "[{} {:?}] {:?}",
+                                is_root,
+                                &commit.get_oid(),
+                                message.lines().next()
+                            )
+                        }
+                        None => {
+                            println!("error");
+                            anyhow!("Unable to execute the commit command because the root tree does not have a valid oid");
+                        }
+                    }
                 }
                 Err(e) => {
                     println!("Error: {}", e)

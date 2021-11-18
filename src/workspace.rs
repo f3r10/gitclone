@@ -1,8 +1,9 @@
 use std::{fs, path::{Path, PathBuf}};
 
 use anyhow::Result;
+use anyhow::anyhow;
 
-use crate::{Database, Entry, EntryAdd, Index, Tree, util::{self, TreeAux, TreeEntry}};
+use crate::{Database, Entry, EntryAdd, EntryWrapper, Index, Tree, util::{self, TreeAux}};
 
 pub struct Workspace {
     pathname: PathBuf,
@@ -80,35 +81,42 @@ impl Workspace {
             entries.push(t)
         };
 
-        let entries_data = util::get_data(&mut entries)?;
+        // let entries_data = util::get_data(&mut entries)?;
 
-        let length = entries_data.len();
+        // let length = entries_data.len();
 
-        let mut data = Vec::new();
+        // let mut data = Vec::new();
 
-        data.extend_from_slice("tree".as_bytes());
-        data.push(0x20u8);
-        data.extend_from_slice(length.to_string().as_bytes());
-        data.push(0x00u8);
-        data.extend(entries_data);
+        // data.extend_from_slice("tree".as_bytes());
+        // data.push(0x20u8);
+        // data.extend_from_slice(length.to_string().as_bytes());
+        // data.push(0x00u8);
+        // data.extend(entries_data);
 
-        let data_to_write = data;
+        // let data_to_write = data;
 
-        let oid = util::hexdigest_vec(&data_to_write);
-        let tree = Tree::new(entries, self.pathname.clone(), &oid);
+        // let oid = util::hexdigest_vec(&data_to_write);
+        let tree = Tree::new(entries, self.pathname.clone());
         //TODO add and commit are using the same
-        db.write_object(&oid, data_to_write)?;
+        // db.write_object(&oid, data_to_write)?;
         Ok(tree)
     }
 
     pub fn create_index_entry(&self, tree: &Tree, db: &Database, index: &mut Index) -> Result<()> {
         for entry in &tree.entries {
             match entry {
-                TreeEntry::TreeLeaf { entry: e, name: _ } => {
+                EntryWrapper::Entry { entry: e, name: _ } => {
                     let stat = util::stat_file(e.path.canonicalize()?)?;
-                    index.add(e.path.to_path_buf(), e.oid.clone(), stat)?;
+                    match &e.oid {
+                        Some(oid) => {
+                            index.add(e.path.to_path_buf(), oid.to_vec(), stat)?;
+                        },
+                        None => {
+                            anyhow!("Unable to build entry because there is not a valid oid");
+                        },
+                    } 
                 } ,
-                TreeEntry::TreeBranch { tree, name: _ } => self.create_index_entry(&tree, db, index)?,
+                EntryWrapper::EntryTree { tree, name: _ } => self.create_index_entry(&tree, db, index)?,
             }
         }
         Ok(())

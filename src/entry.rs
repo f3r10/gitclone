@@ -1,19 +1,26 @@
-use std::{fmt::Display, fs::{self}, path::PathBuf};
+use std::{fmt::Display, path::PathBuf};
 
 use anyhow::Result;
+use anyhow::anyhow;
 
-use crate::{Blob, Database, Object, Tree, util::{self, TreeEntry, TreeEntryAux}};
+use crate::{Blob, Database, Object, Tree, util::{self, TreeEntryAux}};
+
+#[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
+pub enum EntryWrapper {
+    EntryTree { tree: Tree, name: String },
+    Entry { entry: Entry, name: String },
+}
 
 #[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
 pub struct Entry {
     pub name: String,
-    pub oid: Vec<u8>,
+    pub oid: Option<Vec<u8>>,
     pub mode: String,
     pub path: PathBuf,
 }
 
 impl Entry {
-    pub fn new(path: &PathBuf, oid: Vec<u8>) -> Result<Self> {
+    pub fn new(path: &PathBuf, oid: Option<Vec<u8>>) -> Result<Self> {
         let name = path
             .file_name()
             .expect("unable to get file name")
@@ -28,14 +35,21 @@ impl Entry {
             path: path.to_path_buf(),
         })
     }
-    pub fn build_entry(root_path: PathBuf, aux: TreeEntryAux, db: &Database) -> Result<TreeEntry> {
+    pub fn build_entry(root_path: PathBuf, aux: TreeEntryAux, db: &Database) -> Result<EntryWrapper> {
         match aux {
             TreeEntryAux::TreeLeafAux { entry } => {
-                //TODO add and commit are using the same method now
-                let mut blob = Blob::new(entry.clone().path)?;
-                db.store(&mut blob)?;
-                let leaf = TreeEntry::TreeLeaf {
-                    entry: entry.clone(),
+                let mut n_entry: Entry;
+                if entry.oid.is_some() {
+                    n_entry = entry.clone();
+                } else {
+                    let mut blob = Blob::new(entry.clone().path)?;
+                    db.store(&mut blob)?;
+                    n_entry = entry.clone();
+                    n_entry.oid = Some(blob.get_oid()?);
+                }
+                
+                let leaf = EntryWrapper::Entry {
+                    entry: n_entry,
                     name: entry.name,
                 };
                 Ok(leaf)
@@ -48,13 +62,19 @@ impl Entry {
 
     pub fn get_data(&self) -> Result<Vec<u8>> {
         let mut data = Vec::new();
-
-        data.extend_from_slice(self.mode.as_bytes());
-        data.push(0x20u8);
-        data.extend_from_slice(self.name.as_bytes());
-        data.push(0x00u8);
-        data.extend_from_slice(&self.oid);
-        Ok(data)
+        match &self.oid {
+            Some(oid) => {
+                data.extend_from_slice(self.mode.as_bytes());
+                data.push(0x20u8);
+                data.extend_from_slice(self.name.as_bytes());
+                data.push(0x00u8);
+                data.extend_from_slice(oid);
+                Ok(data)
+            },
+            None => {
+                Err(anyhow!("unable to get blob oid"))
+            },
+        }
     }
 }
 

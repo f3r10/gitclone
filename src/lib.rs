@@ -14,6 +14,7 @@ pub use workspace::Workspace;
 pub use blob::Blob;
 pub use database::Database;
 pub use entry::Entry;
+pub use entry::EntryWrapper;
 pub use tree::Tree;
 pub use author::Author;
 pub use commit::Commit;

@@ -9,13 +9,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{Blob, Database, Entry, EntryAdd, Object, Tree};
+use crate::Object;
+use crate::{Entry, EntryWrapper};
 
-#[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
-pub enum TreeEntry {
-    TreeBranch { tree: Tree, name: String },
-    TreeLeaf { entry: Entry, name: String },
-}
 
 #[derive(Debug)]
 pub enum TreeEntryAux {
@@ -56,18 +52,7 @@ impl TreeAux {
                 let mut comps = root_path.components();
                 let comp = comps.next_back().unwrap();
                 let comp: &Path = comp.as_ref();
-                let oid: Vec<u8>;
-                match oid_o {
-                    Some(oid_r) => {
-                        oid = oid_r
-                    },
-                    None => {
-                        let mut blob = Blob::new(root_path.clone())?;
-                        //TODO should this blob be saved?
-                        oid = blob.get_oid()?
-                    },
-                }
-                let e = Entry::new(&root_path, oid)?;
+                let e = Entry::new(&root_path, oid_o)?;
                 let leaf = TreeEntryAux::TreeLeafAux {
                     entry: e,
                 };
@@ -77,80 +62,81 @@ impl TreeAux {
     }
 }
 
-impl Ord for TreeEntry {
+impl Ord for EntryWrapper {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match (self, other) {
             (
-                TreeEntry::TreeBranch { tree: _, name: n1 },
-                TreeEntry::TreeBranch { tree: _, name: n2 },
+                EntryWrapper::EntryTree { tree: _, name: n1 },
+                EntryWrapper::EntryTree { tree: _, name: n2 },
             ) => n1.cmp(&n2),
             (
-                TreeEntry::TreeBranch { tree: _, name: n1 },
-                TreeEntry::TreeLeaf { entry: _, name: n2 },
+                EntryWrapper::EntryTree { tree: _, name: n1 },
+                EntryWrapper::Entry { entry: _, name: n2 },
             ) => n1.cmp(&n2),
             (
-                TreeEntry::TreeLeaf { entry: _, name: n1 },
-                TreeEntry::TreeLeaf { entry: _, name: n2 },
+                EntryWrapper::Entry { entry: _, name: n1 },
+                EntryWrapper::Entry { entry: _, name: n2 },
             ) => n1.cmp(&n2),
             (
-                TreeEntry::TreeLeaf { entry: _, name: n1 },
-                TreeEntry::TreeBranch { tree: _, name: n2 },
+                EntryWrapper::Entry { entry: _, name: n1 },
+                EntryWrapper::EntryTree { tree: _, name: n2 },
             ) => n1.cmp(&n2),
         }
     }
 }
 
-impl Display for TreeEntry {
+impl Display for EntryWrapper {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TreeEntry::TreeBranch { tree: _, name } => f.write_fmt(format_args!("{}", name)),
-            TreeEntry::TreeLeaf { entry: _, name } => f.write_fmt(format_args!("{}", name)),
+            EntryWrapper::EntryTree { tree: _, name } => f.write_fmt(format_args!("{}", name)),
+            EntryWrapper::Entry { entry: _, name } => f.write_fmt(format_args!("{}", name)),
         }
     }
 }
 
-pub fn get_data(entries: &mut Vec<TreeEntry>) -> Result<Vec<u8>> {
+pub fn get_data(entries: &mut Vec<EntryWrapper>) -> Result<Vec<u8>> {
     let mut acc_data: Vec<u8> = Vec::new();
     entries.sort_by(|a, b| match (a, b) {
         (
-            TreeEntry::TreeBranch { tree: _, name: n1 },
-            TreeEntry::TreeBranch { tree: _, name: n2 },
+            EntryWrapper::EntryTree { tree: _, name: n1 },
+            EntryWrapper::EntryTree { tree: _, name: n2 },
         ) => n1.cmp(&n2),
         (
-            TreeEntry::TreeBranch { tree: _, name: n1 },
-            TreeEntry::TreeLeaf { entry: _, name: n2 },
+            EntryWrapper::EntryTree { tree: _, name: n1 },
+            EntryWrapper::Entry { entry: _, name: n2 },
         ) => n1.cmp(&n2),
         (
-            TreeEntry::TreeLeaf { entry: _, name: n1 },
-            TreeEntry::TreeLeaf { entry: _, name: n2 },
+            EntryWrapper::Entry { entry: _, name: n1 },
+            EntryWrapper::Entry { entry: _, name: n2 },
         ) => n1.cmp(&n2),
         (
-            TreeEntry::TreeLeaf { entry: _, name: n1 },
-            TreeEntry::TreeBranch { tree: _, name: n2 },
+            EntryWrapper::Entry { entry: _, name: n1 },
+            EntryWrapper::EntryTree { tree: _, name: n2 },
         ) => n1.cmp(&n2),
     });
     entries
         .into_iter()
         .map(|entry| match entry {
-            TreeEntry::TreeLeaf { entry, name: _ } => {
+            EntryWrapper::Entry { entry, name: _ } => {
                 acc_data.extend(entry.get_data()?);
                 acc_data.to_vec();
                 Ok(())
             }
-            TreeEntry::TreeBranch { tree, name: _ } => {
+            EntryWrapper::EntryTree { tree, name: _ } => {
+                let oid = tree.get_oid()?;
                 let mut data = Vec::new();
                 data.extend_from_slice("040000".as_bytes());
                 data.push(0x20u8);
                 data.extend_from_slice(
                     tree.parent
-                        .file_name()
-                        .expect("unable to get filename")
-                        .to_str()
-                        .expect("invalid filename")
-                        .as_bytes(),
+                    .file_name()
+                    .expect("unable to get filename")
+                    .to_str()
+                    .expect("invalid filename")
+                    .as_bytes(),
                 );
                 data.push(0x00u8);
-                data.extend_from_slice(&tree.oid);
+                data.extend_from_slice(&oid);
                 acc_data.extend(data);
                 acc_data.to_vec();
                 Ok(())
@@ -158,65 +144,6 @@ pub fn get_data(entries: &mut Vec<TreeEntry>) -> Result<Vec<u8>> {
         })
         .collect::<Result<Vec<_>>>()?;
     Ok(acc_data)
-}
-// let mut comps = e.path.components();
-// let paths: Vec<_> =
-//     comps.map(|e| e.as_os_str() ).map(|e| Path::new(e).to_path_buf()).collect();
-pub fn build(root: TreeAux, db: &Database) -> Result<String> {
-    let mut trees = Vec::new();
-    for (entry, aux) in root.entries {
-        let t = Entry::build_entry(entry, aux, db)?;
-        trees.push(t)
-    }
-    let entries_data = get_data(&mut trees)?;
-
-    let length = entries_data.len();
-
-    let mut data = Vec::new();
-
-    data.extend_from_slice("tree".as_bytes());
-    data.push(0x20u8);
-    data.extend_from_slice(length.to_string().as_bytes());
-    data.push(0x00u8);
-    data.extend(entries_data);
-
-    let data_to_write = data;
-
-    let oid = hexdigest_vec(&data_to_write);
-
-    db.write_object(&oid, data_to_write)?;
-
-    Ok(encode_vec(&oid))
-}
-
-pub fn print_tree_aux(tree: TreeAux, main_key: PathBuf) -> () {
-    println!(" -- sub-keys: {:?} of {:?} ", tree.entries.keys(), main_key);
-    for (entry, aux) in tree.entries {
-        match aux {
-            TreeEntryAux::TreeLeafAux { entry } => {
-                println!(" -- sub-value: {:?}", entry);
-            }
-            TreeEntryAux::TreeBranchAux { tree } => {
-                print_tree_aux(tree, entry);
-            }
-        }
-    }
-}
-
-pub fn print_tree(tree: Tree) -> () {
-    for entry in tree.entries {
-        println!("parent root: {:?}, oid: {:?}", tree.parent, tree.oid);
-        match entry {
-            TreeEntry::TreeLeaf { entry, name: _ } => {
-                println!(" -- parent branch: {:?}", entry.path);
-                println!(" ---- entry: {:?}, oid: {:?}", entry.name, entry.oid);
-            }
-            TreeEntry::TreeBranch { tree, name: _ } => {
-                // println!("--parent branch: {:?}", b.parent);
-                print_tree(tree)
-            }
-        }
-    }
 }
 
 pub fn read_file(path: PathBuf) -> Result<Vec<u8>> {

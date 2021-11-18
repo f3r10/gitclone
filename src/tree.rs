@@ -1,36 +1,69 @@
 use anyhow::Result;
 
-use crate::{Database, Entry, util::{self, TreeEntry, TreeEntryAux}};
+use crate::{Database, Entry, EntryWrapper, Object, util::{self, TreeEntryAux}};
 use core::fmt;
-use std::{collections::HashMap, fmt::Display, fs, path::PathBuf};
+use std::{collections::HashMap, fmt::Display, path::PathBuf};
 
 #[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
 pub struct Tree {
-    pub entries: Vec<TreeEntry>,
+    pub entries: Vec<EntryWrapper>,
     pub parent: PathBuf,
     type_: String,
-    pub oid: Vec<u8>,
+    pub oid: Option<Vec<u8>>,
+}
+
+impl Object for Tree {
+    fn get_data(&self) -> Result<Vec<u8>> {
+        self.get_data_to_write()
+    }
+
+    fn type_(&self) -> &str {
+        &self.type_
+    }
+
+    fn get_oid(&mut self) -> Result<Vec<u8>> {
+         match &self.oid  {
+             Some(oid) => Ok(oid.to_vec()),
+             None => {
+                 let digest = util::hexdigest_vec(&self.get_data_to_write()?);
+                 self.set_oid(&digest);
+                 Ok(digest)
+             }
+        }
+    }
 }
 
 impl Tree {
-    pub fn new(entries: Vec<TreeEntry>, parent: PathBuf, oid: &Vec<u8>) -> Self {
+    pub fn new(entries: Vec<EntryWrapper>, parent: PathBuf) -> Self {
         Tree {
             entries,
             type_: "tree".to_string(),
-            oid: oid.to_vec(),
+            oid: None,
             parent,
         }
     }
 
-    pub fn build_tree(root_path: PathBuf, entries: HashMap<PathBuf, TreeEntryAux>, db: &Database) -> Result<TreeEntry> {
+    fn set_oid(&mut self, oid: &Vec<u8>) -> () {
+        self.oid = Some(oid.to_vec());
+    }
 
-        // println!("tree - path: {:?}, paths: {:?}", pathbuf, paths);
-        let mut final_entries: Vec<TreeEntry> = Vec::new();
-        for (key, value) in entries {
-            let entry = Entry::build_entry(key, value, db)?;
-            final_entries.push(entry);
-        };
+    pub fn save_tree(&mut self, db: &Database) -> Result<()> {
+        for e in self.entries.iter_mut() {
+            match e {
+                EntryWrapper::Entry { entry: _, name: _ } => {
 
+                },
+                EntryWrapper::EntryTree { tree: t, name: _ } => {
+                    db.store(t)?
+                },
+            }
+        }
+        db.store(self)?;
+        Ok(())
+    }
+
+    pub fn get_data_to_write(&self) -> Result<Vec<u8>> {
+        let mut final_entries = self.entries.to_vec();
         let entries_data = util::get_data(&mut final_entries)?;
         let length = entries_data.len();
 
@@ -42,17 +75,20 @@ impl Tree {
         data.push(0x00u8);
         data.extend(entries_data);
         let data_to_write = data;
-        let oid = util::hexdigest_vec(&data_to_write);
-        db.write_object(&oid, data_to_write)?;
+        Ok(data_to_write)
+    }
 
-        let tp = Tree {
-            entries: final_entries,
-            type_: "tree".to_string(),
-            oid,
-            parent: root_path.clone(),
+    pub fn build_tree(root_path: PathBuf, entries: HashMap<PathBuf, TreeEntryAux>, db: &Database) -> Result<EntryWrapper> {
+
+        let mut final_entries: Vec<EntryWrapper> = Vec::new();
+        for (key, value) in entries {
+            let entry = Entry::build_entry(key, value, db)?;
+            final_entries.push(entry);
         };
-        let tree = TreeEntry::TreeBranch {
-            tree: tp,
+        let tree = Tree::new(final_entries, root_path.to_path_buf());
+
+        let tree_wrapper = EntryWrapper::EntryTree {
+            tree: tree,
             name: root_path
                 .file_name()
                 .expect("unable to get filename")
@@ -60,7 +96,7 @@ impl Tree {
                 .expect("invalid filename")
                 .to_string(),
         };
-        Ok(tree)
+        Ok(tree_wrapper)
     }
 }
 impl Display for Tree {
@@ -69,8 +105,8 @@ impl Display for Tree {
 
         for entry in &self.entries {
             match entry {
-                TreeEntry::TreeLeaf { entry: _, name } => names.push(name.to_string()),
-                TreeEntry::TreeBranch { tree: _, name } => names.push(name.to_string()),
+                EntryWrapper::Entry { entry: _, name } => names.push(name.to_string()),
+                EntryWrapper::EntryTree { tree: _, name } => names.push(name.to_string()),
             }
         }
 
