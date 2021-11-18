@@ -54,7 +54,8 @@ impl Tree {
 
                 },
                 EntryWrapper::EntryTree { tree: t, name: _ } => {
-                    db.store(t)?
+                    t.save_tree(&db)?;
+                    db.store(t)?;
                 },
             }
         }
