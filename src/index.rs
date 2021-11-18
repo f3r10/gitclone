@@ -14,13 +14,6 @@ use anyhow::Result;
 use crate::Checksum;
 use crate::util;
 
-// #[derive(Deserialize, Serialize, Debug)]
-#[derive(Debug)]
-struct Header<'a> {
-    signature: &'a str,
-    version: i32,
-    count: i32,
-}
 pub struct Index {
     pathname: PathBuf,
     entries: HashMap<String, EntryAdd>,
@@ -86,8 +79,7 @@ impl EntryAdd {
         Ok(data)
     }
 
-    fn create(pathname: PathBuf, oid: String, stat: Metadata) -> Result<Self> {
-        let oid = hex::decode(oid)?;
+    fn create(pathname: PathBuf, oid: Vec<u8>, stat: Metadata) -> Result<Self> {
         let path = pathname.to_str().unwrap();
         let mode = if (stat.mode() & 0o001) != 0 {
             EXECUTABLE_MODE
@@ -217,7 +209,7 @@ impl Index {
         Ok(())
     }
 
-    pub fn add(&mut self, pathname: PathBuf, oid: String, stat: Metadata) -> Result<()> {
+    pub fn add(&mut self, pathname: PathBuf, oid: Vec<u8>, stat: Metadata) -> Result<()> {
         // let path = pathname.to_str().unwrap();
         let entry = EntryAdd::create(pathname.clone(), oid, stat)?;
         self.store_entry(entry)?;
@@ -242,9 +234,8 @@ impl Index {
         for v in entries {
             data.extend_from_slice(&v.get_data().unwrap());
         }
-        let oid = util::hexdigest(&data);
+        let oid = util::hexdigest_vec(&data);
         let mut data_to_write = data;
-        let oid = hex::decode(oid)?;
         data_to_write.extend_from_slice(&oid);
 
         let mut file = OpenOptions::new()

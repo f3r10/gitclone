@@ -127,7 +127,6 @@ pub fn get_data(entries: &mut Vec<TreeEntry>) -> Result<Vec<u8>> {
             }
             TreeEntry::TreeBranch { tree, name: _ } => {
                 let mut data = Vec::new();
-                let oid = hex::decode(tree.oid.clone())?;
                 data.extend_from_slice("040000".as_bytes());
                 data.push(0x20u8);
                 data.extend_from_slice(
@@ -139,7 +138,7 @@ pub fn get_data(entries: &mut Vec<TreeEntry>) -> Result<Vec<u8>> {
                         .as_bytes(),
                 );
                 data.push(0x00u8);
-                data.extend_from_slice(&oid);
+                data.extend_from_slice(&tree.oid);
                 acc_data.extend(data);
                 acc_data.to_vec();
                 Ok(())
@@ -178,11 +177,11 @@ pub fn build(entries_add: Vec<&EntryAdd>, db: &Database) -> Result<String> {
 
     let data_to_write = data;
 
-    let oid = hexdigest(&data_to_write);
+    let oid = hexdigest_vec(&data_to_write);
 
-    db.write_object(oid.clone(), data_to_write)?;
+    db.write_object(&oid, data_to_write)?;
 
-    Ok(oid)
+    Ok(encode_vec(&oid))
 }
 
 pub fn print_tree_aux(tree: TreeAux, main_key: PathBuf) -> () {
@@ -237,16 +236,6 @@ pub fn get_mode(path_buf: PathBuf) -> Result<String> {
     } else {
         Ok("100644".to_string())
     }
-}
-
-pub fn hexdigest(data: &Vec<u8>) -> String {
-    let mut context = Context::new(&SHA1_FOR_LEGACY_USE_ONLY);
-
-    context.update(&data);
-
-    let digest = context.finish();
-
-    HEXLOWER.encode(digest.as_ref())
 }
 
 pub fn encode_vec(data: &Vec<u8>) -> String {

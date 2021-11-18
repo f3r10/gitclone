@@ -9,11 +9,11 @@ pub struct Tree {
     pub entries: Vec<TreeEntry>,
     pub parent: PathBuf,
     type_: String,
-    pub oid: String,
+    pub oid: Vec<u8>,
 }
 
 impl Tree {
-    pub fn new(entries: Vec<TreeEntry>, parent: PathBuf, oid: String) -> Self {
+    pub fn new(entries: Vec<TreeEntry>, parent: PathBuf, oid: Vec<u8>) -> Self {
         Tree {
             entries,
             type_: "tree".to_string(),
@@ -42,8 +42,8 @@ impl Tree {
         data.push(0x00u8);
         data.extend(entries_data);
         let data_to_write = data;
-        let oid = util::hexdigest(&data_to_write);
-        db.write_object(oid.clone(), data_to_write)?;
+        let oid = util::hexdigest_vec(&data_to_write);
+        db.write_object(&oid, data_to_write)?;
 
         let tp = Tree {
             entries: final_entries,
@@ -95,9 +95,9 @@ impl Tree {
 
         let data_to_write = data;
 
-        let oid = util::hexdigest(&data_to_write);
+        let oid = util::hexdigest_vec(&data_to_write);
 
-        db.write_object(oid.clone(), data_to_write)?;
+        db.write_object(&oid, data_to_write)?;
         let tp = Tree{
             entries,
             type_: "tree".to_string(),

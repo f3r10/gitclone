@@ -22,11 +22,12 @@ impl Database {
 
     pub fn store(&self, object: &mut dyn Object) -> Result<()> {
         let data = object.get_data()?;
-        self.write_object(util::encode_vec(&object.get_oid()?), data)
+        self.write_object(&object.get_oid()?, data)
     }
 
-    pub fn write_object(&self, oid: String, content: Vec<u8>) -> Result<()> {
-        let (a, b) = oid.split_at(2);
+    pub fn write_object(&self, oid: &Vec<u8>, content: Vec<u8>) -> Result<()> {
+        let oid_s = util::encode_vec(&oid);
+        let (a, b) = oid_s.split_at(2);
         let path = &self.pathname.join(a);
         if !path.exists() {
             fs::create_dir_all(&path).expect("unable to create path");

@@ -62,8 +62,8 @@ impl Workspace {
 
         let data_to_write = data;
 
-        let oid = util::hexdigest(&data_to_write);
-        let tree = Tree::new(entries, self.pathname.clone(), oid.clone());
+        let oid = util::hexdigest_vec(&data_to_write);
+        let tree = Tree::new(entries, self.pathname.clone(), oid);
         // db.write_object(oid.clone(), data_to_write)?;
         Ok(tree)
     }
@@ -99,8 +99,8 @@ impl Workspace {
 
         let data_to_write = data;
 
-        let oid = util::hexdigest(&data_to_write);
-        let tree = Tree::new(entries, self.pathname.clone(), oid.clone());
+        let oid = util::hexdigest_vec(&data_to_write);
+        let tree = Tree::new(entries, self.pathname.clone(), oid);
         // db.write_object(oid.clone(), data_to_write)?;
         Ok(tree)
     }
@@ -150,10 +150,10 @@ impl Workspace {
 
         let data_to_write = data;
 
-        let oid = util::hexdigest(&data_to_write);
+        let oid = util::hexdigest_vec(&data_to_write);
         let tree = Tree::new(entries, self.pathname.clone(), oid.clone());
-        db.write_object(oid.clone(), data_to_write)?;
-        Ok((tree, oid))
+        db.write_object(&oid, data_to_write)?;
+        Ok((tree, util::encode_vec(&oid)))
     }
 
     pub fn get_git_path(&self) -> PathBuf {

@@ -7,10 +7,9 @@ use crate::{Blob, Database, Object, Tree, util::{self, TreeEntry, TreeEntryAux}}
 #[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
 pub struct Entry {
     pub name: String,
-    pub oid: String,
+    pub oid: Vec<u8>,
     pub mode: String,
     pub path: Option<PathBuf>,
-    // pub blob: Blob,
 }
 
 impl Entry {
@@ -35,7 +34,7 @@ impl Entry {
                         .to_str()
                         .expect("invalid filename")
                         .to_string(),
-                        oid: util::encode_vec(&blob.clone().get_oid()?),
+                        oid: blob.clone().get_oid()?,
                         mode: util::get_mode(entry.path.to_path_buf())?,
                         path: Some(entry.path.to_path_buf()),
                         // blob,
@@ -71,7 +70,7 @@ impl Entry {
                     .to_str()
                     .expect("invalid filename")
                     .to_string(),
-                oid: util::encode_vec(&blob.clone().get_oid()?),
+                oid: blob.clone().get_oid()?,
                 mode: util::get_mode(path.to_path_buf())?,
                 path: Some(path.to_path_buf()),
             };
@@ -92,13 +91,12 @@ impl Entry {
 
     pub fn get_data(&self) -> Result<Vec<u8>> {
         let mut data = Vec::new();
-        let oid = hex::decode(&self.oid)?;
 
         data.extend_from_slice(self.mode.as_bytes());
         data.push(0x20u8);
         data.extend_from_slice(self.name.as_bytes());
         data.push(0x00u8);
-        data.extend_from_slice(&oid);
+        data.extend_from_slice(&self.oid);
         Ok(data)
     }
 }
