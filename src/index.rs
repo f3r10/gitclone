@@ -33,7 +33,7 @@ pub struct EntryAdd {
     uid: u32,
     gid: u32,
     size: u32,
-    oid: Vec<u8>,
+    pub oid: Vec<u8>,
     flags: u16,
     pub path: PathBuf,
 }

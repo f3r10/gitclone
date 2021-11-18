@@ -11,7 +11,7 @@ impl Author {
         Author {
             name: name.to_string(),
             email: email.to_string(),
-            time: time,
+            time,
         }
     }
 

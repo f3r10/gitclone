@@ -15,58 +15,6 @@ impl Workspace {
         }
     }
 
-    pub fn build_tree(&self, paths: Vec<PathBuf>, db: &Database) -> Result<Tree> {
-        let mut entries = Vec::new();
-        for path in paths.iter() {
-            let parent = path.parent();
-            match parent {
-                Some(p) => {
-                let mut tail = p.components();
-                let first = tail.next().unwrap();
-                let first: &Path = first.as_ref();
-                if first.is_dir() {
-                    // let paths: Vec<&Path> = tail.map(|e| e.as_ref() ).collect();
-
-                } else {
-                    let entry = Entry::build(first.to_path_buf(), db)?;
-                    entries.push(entry);
-                }
-                let mut dir_entries: Vec<TreeEntry> = fs::read_dir(path)?
-                    .into_iter()
-                    .filter(|e| match e {
-                        Ok(p) => p.file_name() != ".git" && p.file_name() != "target",
-                        Err(_e) => true,
-                    })
-                    .flat_map(|e| e.map(|e| Entry::build(e.path(), db)))
-                    .collect::<Result<Vec<_>>>()?;
-                entries.append(&mut dir_entries);
-                },
-                None => {
-                    let entry = Entry::build(path.to_path_buf(), db)?;
-                    entries.push(entry);
-                },
-
-            };
-        }
-        let entries_data = util::get_data(&mut entries)?;
-
-        let length = entries_data.len();
-
-        let mut data = Vec::new();
-
-        data.extend_from_slice("tree".as_bytes());
-        data.push(0x20u8);
-        data.extend_from_slice(length.to_string().as_bytes());
-        data.push(0x00u8);
-        data.extend(entries_data);
-
-        let data_to_write = data;
-
-        let oid = util::hexdigest_vec(&data_to_write);
-        let tree = Tree::new(entries, self.pathname.clone(), oid);
-        // db.write_object(oid.clone(), data_to_write)?;
-        Ok(tree)
-    }
     pub fn build_add_tree(&self, paths: Vec<PathBuf>, db: &Database) -> Result<Tree> {
         let mut entries = Vec::new();
         for path in paths.iter() {
@@ -109,8 +57,8 @@ impl Workspace {
         for entry in &tree.entries {
             match entry {
                 TreeEntry::TreeLeaf { entry: e, name: _ } => {
-                    let stat = util::stat_file(e.path.as_ref().unwrap().canonicalize()?)?;
-                    index.add(e.path.as_ref().unwrap().to_path_buf(), e.oid.clone(), stat)?;
+                    let stat = util::stat_file(e.path.canonicalize()?)?;
+                    index.add(e.path.to_path_buf(), e.oid.clone(), stat)?;
                 } ,
                 TreeEntry::TreeBranch { tree, name: _ } => self.create_index_entry(&tree, db, index)?,
             }

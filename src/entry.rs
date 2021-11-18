@@ -9,46 +9,33 @@ pub struct Entry {
     pub name: String,
     pub oid: Vec<u8>,
     pub mode: String,
-    pub path: Option<PathBuf>,
+    pub path: PathBuf,
 }
 
 impl Entry {
-    // pub fn new(name: String, oid: String, mode: String) -> Self {
-    //     Entry {
-    //         name: name,
-    //         oid: oid,
-    //         mode,
-    //         path: None,
-    //     }
-    // }
+    pub fn new(path: &PathBuf, oid: Vec<u8>) -> Result<Self> {
+        let name = path
+            .file_name()
+            .expect("unable to get file name")
+            .to_str()
+            .expect("invalid filename")
+            .to_string();
+        let mode = util::get_mode(path.to_path_buf())?;
+        Ok(Entry {
+            name,
+            oid,
+            mode,
+            path: path.to_path_buf(),
+        })
+    }
     pub fn build_entry(root_path: PathBuf, aux: TreeEntryAux, db: &Database) -> Result<TreeEntry> {
-        // println!("path: {:?} is_dir: {:?}, paths: {:?}", path, path.is_dir(), paths);
         match aux {
             TreeEntryAux::TreeLeafAux { entry } => {
-                let blob = Blob::new(entry.path.clone())?;
-                // db.write_object(blob.get_oid().to_string(), blob.get_data())?;
-                let e = Entry {
-                    name: entry.path
-                        .file_name()
-                        .expect("unable to get file name")
-                        .to_str()
-                        .expect("invalid filename")
-                        .to_string(),
-                        oid: blob.clone().get_oid()?,
-                        mode: util::get_mode(entry.path.to_path_buf())?,
-                        path: Some(entry.path.to_path_buf()),
-                        // blob,
+                let leaf = TreeEntry::TreeLeaf {
+                    entry: entry.clone(),
+                    name: entry.name,
                 };
-                let entry = TreeEntry::TreeLeaf {
-                    entry: e,
-                    name: entry.path
-                        .file_name()
-                        .expect("unable to get file name ")
-                        .to_str()
-                        .expect("invalid filename")
-                        .to_string(),
-                };
-                Ok(entry)
+                Ok(leaf)
             }
             TreeEntryAux::TreeBranchAux { tree } => {
                 Tree::build_tree(root_path.clone(), tree.entries, db)
@@ -63,17 +50,7 @@ impl Entry {
             let mut blob = Blob::new(path.clone())?;
             db.store(&mut blob)?;
             // db.write_object(util::encode_vec(&blob.get_oid()?), blob.get_data()?)?;
-            let e = Entry {
-                name: path
-                    .file_name()
-                    .expect("unable to get file name")
-                    .to_str()
-                    .expect("invalid filename")
-                    .to_string(),
-                oid: blob.clone().get_oid()?,
-                mode: util::get_mode(path.to_path_buf())?,
-                path: Some(path.to_path_buf()),
-            };
+            let e = Entry::new(&path, blob.get_oid()?)?;
             let entry = TreeEntry::TreeLeaf {
                 entry: e,
                 name: path

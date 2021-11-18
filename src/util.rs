@@ -20,7 +20,7 @@ pub enum TreeEntry {
 #[derive(Debug)]
 pub enum TreeEntryAux {
     TreeBranchAux { tree: TreeAux },
-    TreeLeafAux { entry: EntryAdd },
+    TreeLeafAux { entry: Entry },
 }
 
 #[derive(Debug)]
@@ -33,7 +33,7 @@ impl TreeAux {
             entries: HashMap::new(),
         }
     }
-    pub fn add_entry(&mut self, ancestors: Vec<PathBuf>, entry: EntryAdd) -> Result<()> {
+    pub fn add_entry(&mut self, ancestors: Vec<PathBuf>, entry_add: EntryAdd) -> Result<()> {
         let tea = TreeEntryAux::TreeBranchAux { tree: TreeAux::new() };
         if !ancestors.is_empty() {
                 let first = ancestors.first().unwrap();
@@ -48,18 +48,19 @@ impl TreeAux {
                     TreeEntryAux::TreeLeafAux { entry: _entry } => {}
                     TreeEntryAux::TreeBranchAux { tree } => {
                         if let Some((_, elements)) = ancestors.split_first() {
-                            tree.add_entry(elements.to_vec(), entry.clone())?;
+                            tree.add_entry(elements.to_vec(), entry_add)?;
                         }
                     }
                 }
         } else {
-                let mut comps = entry.path.components();
+                let mut comps = entry_add.path.components();
                 let comp = comps.next_back().unwrap();
                 let comp: &Path = comp.as_ref();
-                let e = TreeEntryAux::TreeLeafAux {
-                    entry: entry.clone(),
+                let e = Entry::new(&entry_add.path, entry_add.oid)?;
+                let leaf = TreeEntryAux::TreeLeafAux {
+                    entry: e,
                 };
-                self.entries.insert(comp.to_path_buf(), e);
+                self.entries.insert(comp.to_path_buf(), leaf);
         }
         Ok(())
     }
