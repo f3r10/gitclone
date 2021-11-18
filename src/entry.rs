@@ -78,6 +78,38 @@ impl Entry {
     }
 }
 
+impl Ord for EntryWrapper {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (
+                EntryWrapper::EntryTree { tree: _, name: n1 },
+                EntryWrapper::EntryTree { tree: _, name: n2 },
+            ) => n1.cmp(&n2),
+            (
+                EntryWrapper::EntryTree { tree: _, name: n1 },
+                EntryWrapper::Entry { entry: _, name: n2 },
+            ) => n1.cmp(&n2),
+            (
+                EntryWrapper::Entry { entry: _, name: n1 },
+                EntryWrapper::Entry { entry: _, name: n2 },
+            ) => n1.cmp(&n2),
+            (
+                EntryWrapper::Entry { entry: _, name: n1 },
+                EntryWrapper::EntryTree { tree: _, name: n2 },
+            ) => n1.cmp(&n2),
+        }
+    }
+}
+
+impl Display for EntryWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EntryWrapper::EntryTree { tree: _, name } => f.write_fmt(format_args!("{}", name)),
+            EntryWrapper::Entry { entry: _, name } => f.write_fmt(format_args!("{}", name)),
+        }
+    }
+}
+
 impl Display for Entry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{}", &self.name))

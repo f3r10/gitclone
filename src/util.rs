@@ -3,7 +3,6 @@ use data_encoding::HEXLOWER;
 use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY};
 use std::{
     collections::HashMap,
-    fmt::Display,
     fs::{self, Metadata},
     os::unix::prelude::MetadataExt,
     path::{Path, PathBuf},
@@ -59,38 +58,6 @@ impl TreeAux {
                 self.entries.insert(comp.to_path_buf(), leaf);
         }
         Ok(())
-    }
-}
-
-impl Ord for EntryWrapper {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match (self, other) {
-            (
-                EntryWrapper::EntryTree { tree: _, name: n1 },
-                EntryWrapper::EntryTree { tree: _, name: n2 },
-            ) => n1.cmp(&n2),
-            (
-                EntryWrapper::EntryTree { tree: _, name: n1 },
-                EntryWrapper::Entry { entry: _, name: n2 },
-            ) => n1.cmp(&n2),
-            (
-                EntryWrapper::Entry { entry: _, name: n1 },
-                EntryWrapper::Entry { entry: _, name: n2 },
-            ) => n1.cmp(&n2),
-            (
-                EntryWrapper::Entry { entry: _, name: n1 },
-                EntryWrapper::EntryTree { tree: _, name: n2 },
-            ) => n1.cmp(&n2),
-        }
-    }
-}
-
-impl Display for EntryWrapper {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            EntryWrapper::EntryTree { tree: _, name } => f.write_fmt(format_args!("{}", name)),
-            EntryWrapper::Entry { entry: _, name } => f.write_fmt(format_args!("{}", name)),
-        }
     }
 }
 

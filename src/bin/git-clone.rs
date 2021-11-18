@@ -52,9 +52,10 @@ fn main() -> Result<()> {
                         "Initialized empty Jit repository in: {:?}",
                         git_path.to_str()
                     );
+                    Ok(())
                 }
                 Err(e) => {
-                    println!("Error: {}", e);
+                    Err(anyhow!(e))
                 }
             }
         }
@@ -74,9 +75,10 @@ fn main() -> Result<()> {
                     let tree = workspace.build_add_tree(root, &db)?;
                     workspace.create_index_entry(&tree, &db, &mut index)?;
                     index.write_updates()?;
+                    Ok(())
                 }
                 Err(e) => {
-                    println!("Error: {}", e);
+                    Err(anyhow!(e))
                 }
             }
         }
@@ -131,20 +133,19 @@ fn main() -> Result<()> {
                                 is_root,
                                 &commit.get_oid(),
                                 message.lines().next()
-                            )
+                            );
+                            Ok(())
                         }
                         None => {
-                            println!("error");
-                            anyhow!("Unable to execute the commit command because the root tree does not have a valid oid");
+                            Err(anyhow!("Unable to execute the commit command because the root tree does not have a valid oid"))
                         }
                     }
                 }
                 Err(e) => {
-                    println!("Error: {}", e)
+                    Err(anyhow!(e))
                 }
             }
         }
         _ => unreachable!(),
     }
-    Ok(())
 }
