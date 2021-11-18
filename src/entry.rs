@@ -31,6 +31,9 @@ impl Entry {
     pub fn build_entry(root_path: PathBuf, aux: TreeEntryAux, db: &Database) -> Result<TreeEntry> {
         match aux {
             TreeEntryAux::TreeLeafAux { entry } => {
+                //TODO add and commit are using the same method now
+                let mut blob = Blob::new(entry.clone().path)?;
+                db.store(&mut blob)?;
                 let leaf = TreeEntry::TreeLeaf {
                     entry: entry.clone(),
                     name: entry.name,
@@ -40,29 +43,6 @@ impl Entry {
             TreeEntryAux::TreeBranchAux { tree } => {
                 Tree::build_tree(root_path.clone(), tree.entries, db)
             }
-        }
-    }
-
-    pub fn build(path: PathBuf, db: &Database) -> Result<TreeEntry> {
-        let metadata = fs::metadata(&path)?;
-        let filetype = metadata.file_type();
-        if filetype.is_file() {
-            let mut blob = Blob::new(path.clone())?;
-            db.store(&mut blob)?;
-            // db.write_object(util::encode_vec(&blob.get_oid()?), blob.get_data()?)?;
-            let e = Entry::new(&path, blob.get_oid()?)?;
-            let entry = TreeEntry::TreeLeaf {
-                entry: e,
-                name: path
-                    .file_name()
-                    .expect("unable to get file name ")
-                    .to_str()
-                    .expect("invalid filename")
-                    .to_string(),
-            };
-            Ok(entry)
-        } else {
-            Tree::build(path.clone(), db)
         }
     }
 

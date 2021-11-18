@@ -71,7 +71,8 @@ fn main() -> Result<()> {
                     if workspace.get_git_path().join("index").exists() {
                         index.load()?;
                     }
-                    let tree = workspace.build_add_tree(paths, &db)?;
+                    let root = workspace.create_tree_from_paths(paths)?;
+                    let tree = workspace.build_add_tree(root, &db)?;
                     workspace.create_index_entry(&tree, &db, &mut index)?;
                     index.write_updates()?;
                 }
@@ -107,8 +108,9 @@ fn main() -> Result<()> {
                     // let entries_paths: Vec<_> = 
                     //     entries.into_iter().map(|e| e.path.to_path_buf()).collect();
                     // let tree = workspace.build_tree(entries_paths.clone(), &database)?;
-                    let root_oid = util::build(entries, &database)?;
-                    println!("root_oid: {:?}", root_oid);
+                    let root = workspace.create_tree_from_index(entries)?;
+                    let tree = workspace.build_add_tree(root, &database)?;
+                    println!("root_oid: {:?}", tree.oid);
                     // println!("t: {:?}", t)
                     // println!("tree: {:?}", tree);
                     // for e in  entries_paths {
@@ -121,7 +123,7 @@ fn main() -> Result<()> {
                     let current_time = Local::now();
                     let author = Author::new(author, email, current_time);
                     let mut commit = Commit::new(
-                        root_oid.to_string(),
+                        util::encode_vec(&tree.oid),
                         author,
                         message.to_string(),
                         parent.clone(),

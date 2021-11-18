@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{Database, Entry, EntryAdd, Tree};
+use crate::{Blob, Database, Entry, EntryAdd, Object, Tree};
 
 #[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
 pub enum TreeEntry {
@@ -33,7 +33,7 @@ impl TreeAux {
             entries: HashMap::new(),
         }
     }
-    pub fn add_entry(&mut self, ancestors: Vec<PathBuf>, entry_add: EntryAdd) -> Result<()> {
+    pub fn add_entry(&mut self, ancestors: Vec<PathBuf>, root_path: PathBuf, oid_o: Option<Vec<u8>>) -> Result<()> {
         let tea = TreeEntryAux::TreeBranchAux { tree: TreeAux::new() };
         if !ancestors.is_empty() {
                 let first = ancestors.first().unwrap();
@@ -48,15 +48,26 @@ impl TreeAux {
                     TreeEntryAux::TreeLeafAux { entry: _entry } => {}
                     TreeEntryAux::TreeBranchAux { tree } => {
                         if let Some((_, elements)) = ancestors.split_first() {
-                            tree.add_entry(elements.to_vec(), entry_add)?;
+                            tree.add_entry(elements.to_vec(), root_path.to_path_buf(), oid_o)?;
                         }
                     }
                 }
         } else {
-                let mut comps = entry_add.path.components();
+                let mut comps = root_path.components();
                 let comp = comps.next_back().unwrap();
                 let comp: &Path = comp.as_ref();
-                let e = Entry::new(&entry_add.path, entry_add.oid)?;
+                let oid: Vec<u8>;
+                match oid_o {
+                    Some(oid_r) => {
+                        oid = oid_r
+                    },
+                    None => {
+                        let mut blob = Blob::new(root_path.clone())?;
+                        //TODO should this blob be saved?
+                        oid = blob.get_oid()?
+                    },
+                }
+                let e = Entry::new(&root_path, oid)?;
                 let leaf = TreeEntryAux::TreeLeafAux {
                     entry: e,
                 };
@@ -151,14 +162,7 @@ pub fn get_data(entries: &mut Vec<TreeEntry>) -> Result<Vec<u8>> {
 // let mut comps = e.path.components();
 // let paths: Vec<_> =
 //     comps.map(|e| e.as_os_str() ).map(|e| Path::new(e).to_path_buf()).collect();
-pub fn build(entries_add: Vec<&EntryAdd>, db: &Database) -> Result<String> {
-    let mut root = TreeAux::new();
-    for e in entries_add.into_iter() {
-        let mut ancestors: Vec<_> = 
-            e.path.ancestors().filter(|en| en.to_path_buf() != e.path && en.exists()).map(|e| e.to_path_buf()).collect();
-        ancestors.reverse();
-        root.add_entry(ancestors, e.clone())?;
-    }
+pub fn build(root: TreeAux, db: &Database) -> Result<String> {
     let mut trees = Vec::new();
     for (entry, aux) in root.entries {
         let t = Entry::build_entry(entry, aux, db)?;
