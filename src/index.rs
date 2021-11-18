@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::fs::Metadata;
 use std::fs::OpenOptions;
+use std::path::Path;
 use std::{io::Write, os::unix::prelude::MetadataExt, path::PathBuf, u16, u8, usize};
 use anyhow::anyhow;
 use byteorder::{BigEndian, ReadBytesExt};
@@ -22,13 +23,13 @@ struct Header<'a> {
 }
 pub struct Index {
     pathname: PathBuf,
-    entries: HashMap<String, Entry>,
+    entries: HashMap<String, EntryAdd>,
     keys: BTreeSet<String>,
     changed: bool
 }
 
-#[derive(Clone)]
-struct Entry {
+#[derive(Clone, Debug)]
+pub struct EntryAdd {
     ctime: u32,
     ctime_nsec: u32,
     mtime: u32,
@@ -41,7 +42,7 @@ struct Entry {
     size: u32,
     oid: Vec<u8>,
     flags: u16,
-    path: String,
+    pub path: PathBuf,
 }
 
 const ENTRY_BLOCK: usize = 8;
@@ -49,7 +50,20 @@ const REGULAR_MODE: u32 = 0o100644_u32;
 const EXECUTABLE_MODE: u32 = 0o100755_u32;
 const MAX_PATH_SIZE: u16 = 0xfff;
 
-impl Entry {
+impl EntryAdd {
+
+    pub fn get_data_to_tree(&self) -> Result<Vec<u8>> {
+        let mut data = Vec::new();
+        let mode = util::get_mode(self.path.to_path_buf())?;
+
+        data.extend_from_slice(mode.as_bytes());
+        data.push(0x20u8);
+        data.extend_from_slice(&self.path.file_name().unwrap().to_str().unwrap().to_string().as_bytes());
+        data.push(0x00u8);
+        data.extend_from_slice(&self.oid);
+        Ok(data)
+    }
+
     fn get_data(&self) -> Result<Vec<u8>> {
         let mut data = Vec::new();
         data.extend_from_slice(&self.ctime.to_be_bytes());
@@ -64,7 +78,7 @@ impl Entry {
         data.extend_from_slice(&self.size.to_be_bytes());
         data.extend_from_slice(&self.oid);
         data.extend_from_slice(&self.flags.to_be_bytes());
-        data.extend_from_slice(&self.path.as_bytes());
+        data.extend_from_slice(&self.path.to_str().unwrap().to_string().as_bytes());
         data.push(0x00);
         while data.len() % ENTRY_BLOCK != 0 {
             data.push(0x00);
@@ -81,7 +95,7 @@ impl Entry {
             REGULAR_MODE
         };
         let flags = std::cmp::min(path.bytes().len() as u16, MAX_PATH_SIZE);
-        let entry = Entry {
+        let entry = EntryAdd {
             ctime: stat.ctime() as u32,
             ctime_nsec: stat.ctime_nsec() as u32,
             mtime: stat.mtime() as u32,
@@ -92,29 +106,30 @@ impl Entry {
             uid: stat.uid() as u32,
             gid: stat.gid() as u32,
             size: stat.size() as u32,
-            path: path.to_owned(),
+            path: pathname,
             oid,
             flags,
         };
         Ok(entry)
     }
 
-    fn key(self) -> String {
-        self.path
+    pub fn key(&self) -> String {
+        self.path.to_str().unwrap().to_string()
     }
 
-    fn parse(entry: Vec<u8>) -> Result<Entry> {
+    fn parse(entry: Vec<u8>) -> Result<EntryAdd> {
         let mut stats = Vec::new();
         let ( numbers_vec, tail ) = entry.split_at(40);
         let (oid, tail) = tail.split_at(20);
         let oid = oid.to_vec();
         let (mut flag_vec, path_vec) = tail.split_at(2);
         let path = String::from_utf8(path_vec.to_vec())?.trim_matches(char::from(0)).to_string();
+        let path = Path::new(&path).to_path_buf();
         let flags = flag_vec.read_u16::<BigEndian>()?;
         for mut chunk in numbers_vec.chunks_exact(4) {
             stats.push(chunk.read_u32::<BigEndian>()?)
         }
-        let e = Entry{
+        let e = EntryAdd{
             ctime: stats[0],
             ctime_nsec: stats[1],
             mtime: stats[2],
@@ -170,7 +185,7 @@ impl Index {
             while *entry.last().unwrap() != 0u8 {
                 entry.extend_from_slice(&reader.read(ENTRY_BLOCK, true)?)
             }
-            self.store_entry(Entry::parse(entry)?)?;
+            self.store_entry(EntryAdd::parse(entry)?)?;
         }
 
         Ok(())
@@ -195,7 +210,7 @@ impl Index {
         Ok(count)
     }
 
-    fn store_entry(&mut self, entry: Entry) -> Result<()> {
+    fn store_entry(&mut self, entry: EntryAdd) -> Result<()> {
         //TODO find a better way that cloning the entry
         self.keys.insert(entry.clone().key());
         self.entries.insert(entry.clone().key(), entry);
@@ -204,14 +219,14 @@ impl Index {
 
     pub fn add(&mut self, pathname: PathBuf, oid: String, stat: Metadata) -> Result<()> {
         // let path = pathname.to_str().unwrap();
-        let entry = Entry::create(pathname.clone(), oid, stat)?;
+        let entry = EntryAdd::create(pathname.clone(), oid, stat)?;
         self.store_entry(entry)?;
         self.changed = true;
         Ok(())
     }
 
-    fn each_entry(&self) -> Result<Vec<&Entry>> {
-        let mut entries: Vec<&Entry> = Vec::new();
+    pub fn each_entry(&self) -> Result<Vec<&EntryAdd>> {
+        let mut entries: Vec<&EntryAdd> = Vec::new();
         self.keys.iter().for_each(|k| entries.push(self.entries.get(k).unwrap()));
         Ok(entries)
     }

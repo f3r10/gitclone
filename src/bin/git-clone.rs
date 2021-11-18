@@ -1,7 +1,9 @@
 use anyhow::Result;
+use anyhow::anyhow;
 use chrono::Local;
-use gitclone::{Author, Commit, Index, Object, Refs};
+use gitclone::{Author, Commit, EntryAdd, Index, Object, Refs, util};
 use gitclone::{Database, Workspace};
+use std::collections::HashMap;
 use std::path::Path;
 use std::{env::current_dir, fs};
 
@@ -67,7 +69,9 @@ fn main() -> Result<()> {
                     let workspace = Workspace::new(&root_path);
                     let db = Database::new(&workspace.get_db_path());
                     let mut index = Index::new(workspace.get_git_path().join("index"));
-                    index.load()?;
+                    if workspace.get_git_path().join("index").exists() {
+                        index.load()?;
+                    }
                     let tree = workspace.build_add_tree(paths, &db)?;
                     workspace.create_index_entry(&tree, &db, &mut index)?;
                     index.write_updates()?;
@@ -94,7 +98,25 @@ fn main() -> Result<()> {
                 Ok(root_path) => {
                     let workspace = Workspace::new(&root_path);
                     let database = Database::new(&workspace.get_db_path());
-                    let ( _, root_oid ) = workspace.build_root_tree(None, &database)?;
+                    let mut index = Index::new(workspace.get_git_path().join("index"));
+                    if workspace.get_git_path().join("index").exists() {
+                        index.load()?;
+                    } else {
+                        return Err(anyhow!("Unable to commit if there is not a index file"));
+                    }
+                    let entries = index.each_entry()?;
+                    // let entries_paths: Vec<_> = 
+                    //     entries.into_iter().map(|e| e.path.to_path_buf()).collect();
+                    // let tree = workspace.build_tree(entries_paths.clone(), &database)?;
+                    let root_oid = util::build(entries, &database)?;
+                    println!("root_oid: {:?}", root_oid);
+                    // println!("t: {:?}", t)
+                    // println!("tree: {:?}", tree);
+                    // for e in  entries_paths {
+                    //     println!("entries to commit: {:?}, dir {:?}, parent: {:?} ", e, e.is_dir(), e.parent());
+                    // }
+                    //
+                    // let ( _, root_oid ) = workspace.build_root_tree(None, &database)?;
                     let refs = Refs::new(&workspace.get_git_path());
                     let parent = refs.read_head();
                     let current_time = Local::now();
@@ -113,7 +135,7 @@ fn main() -> Result<()> {
                         ""
                     };
                     println!(
-                        "[{} {}] {:?}",
+                        "[{} {:?}] {:?}",
                         is_root,
                         &commit.get_oid(),
                         message.lines().next()

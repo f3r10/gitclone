@@ -20,4 +20,5 @@ pub use commit::Commit;
 pub use object::Object;
 pub use refs::Refs;
 pub use index::Index;
+pub use index::EntryAdd;
 pub use checksum::Checksum;

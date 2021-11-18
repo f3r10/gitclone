@@ -1,8 +1,8 @@
 use anyhow::Result;
 
-use crate::{Database, Entry, util::{self, TreeEntry}};
+use crate::{Database, Entry, util::{self, TreeEntry, TreeEntryAux}};
 use core::fmt;
-use std::{fmt::Display, fs, path::PathBuf};
+use std::{collections::HashMap, fmt::Display, fs, path::PathBuf};
 
 #[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
 pub struct Tree {
@@ -20,6 +20,47 @@ impl Tree {
             oid,
             parent,
         }
+    }
+
+    pub fn build_tree(root_path: PathBuf, entries: HashMap<PathBuf, TreeEntryAux>, db: &Database) -> Result<TreeEntry> {
+
+        // println!("tree - path: {:?}, paths: {:?}", pathbuf, paths);
+        let mut final_entries: Vec<TreeEntry> = Vec::new();
+        for (key, value) in entries {
+            let entry = Entry::build_entry(key, value, db)?;
+            final_entries.push(entry);
+        };
+
+        let entries_data = util::get_data(&mut final_entries)?;
+        let length = entries_data.len();
+
+        let mut data = Vec::new();
+
+        data.extend_from_slice("tree".as_bytes());
+        data.push(0x20u8);
+        data.extend_from_slice(length.to_string().as_bytes());
+        data.push(0x00u8);
+        data.extend(entries_data);
+        let data_to_write = data;
+        let oid = util::hexdigest(&data_to_write);
+        db.write_object(oid.clone(), data_to_write)?;
+
+        let tp = Tree {
+            entries: final_entries,
+            type_: "tree".to_string(),
+            oid,
+            parent: root_path.clone(),
+        };
+        let tree = TreeEntry::TreeBranch {
+            tree: tp,
+            name: root_path
+                .file_name()
+                .expect("unable to get filename")
+                .to_str()
+                .expect("invalid filename")
+                .to_string(),
+        };
+        Ok(tree)
     }
 
     pub fn build(pathbuf: PathBuf, db: &Database) -> Result<TreeEntry> {

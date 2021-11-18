@@ -1,8 +1,8 @@
-use std::{fmt::Display, fs, path::PathBuf};
+use std::{fmt::Display, fs::{self, DirEntry}, path::PathBuf};
 
 use anyhow::Result;
 
-use crate::{Blob, Database, Object, Tree, util::{self, TreeEntry}};
+use crate::{Blob, Database, Object, Tree, util::{self, TreeEntry, TreeEntryAux}};
 
 #[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
 pub struct Entry {
@@ -22,6 +22,40 @@ impl Entry {
     //         path: None,
     //     }
     // }
+    pub fn build_entry(root_path: PathBuf, aux: TreeEntryAux, db: &Database) -> Result<TreeEntry> {
+        // println!("path: {:?} is_dir: {:?}, paths: {:?}", path, path.is_dir(), paths);
+        match aux {
+            TreeEntryAux::TreeLeafAux { entry } => {
+                let blob = Blob::new(entry.path.clone())?;
+                // db.write_object(blob.get_oid().to_string(), blob.get_data())?;
+                let e = Entry {
+                    name: entry.path
+                        .file_name()
+                        .expect("unable to get file name")
+                        .to_str()
+                        .expect("invalid filename")
+                        .to_string(),
+                        oid: blob.clone().get_oid().to_string(),
+                        mode: util::get_mode(entry.path.to_path_buf())?,
+                        path: Some(entry.path.to_path_buf()),
+                        // blob,
+                };
+                let entry = TreeEntry::TreeLeaf {
+                    entry: e,
+                    name: entry.path
+                        .file_name()
+                        .expect("unable to get file name ")
+                        .to_str()
+                        .expect("invalid filename")
+                        .to_string(),
+                };
+                Ok(entry)
+            }
+            TreeEntryAux::TreeBranchAux { tree } => {
+                Tree::build_tree(root_path.clone(), tree.entries, db)
+            }
+        }
+    }
 
     pub fn build(path: PathBuf, db: &Database) -> Result<TreeEntry> {
         let metadata = fs::metadata(&path)?;

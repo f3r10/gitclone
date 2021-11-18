@@ -1,14 +1,68 @@
 use anyhow::Result;
 use data_encoding::HEXLOWER;
 use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY};
-use std::{fmt::Display, fs::{self, Metadata}, os::unix::prelude::MetadataExt, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    fs::{self, Metadata},
+    os::unix::prelude::MetadataExt,
+    path::{Path, PathBuf},
+};
 
-use crate::{Entry, Tree};
+use crate::{Database, Entry, EntryAdd, Tree};
 
 #[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
 pub enum TreeEntry {
     TreeBranch { tree: Tree, name: String },
     TreeLeaf { entry: Entry, name: String },
+}
+
+#[derive(Debug)]
+pub enum TreeEntryAux {
+    TreeBranchAux { tree: TreeAux },
+    TreeLeafAux { entry: EntryAdd },
+}
+
+#[derive(Debug)]
+pub struct TreeAux {
+    pub entries: HashMap<PathBuf, TreeEntryAux>,
+}
+impl TreeAux {
+    pub fn new() -> Self {
+        TreeAux {
+            entries: HashMap::new(),
+        }
+    }
+    pub fn add_entry(&mut self, ancestors: Vec<PathBuf>, entry: EntryAdd) -> Result<()> {
+        let tea = TreeEntryAux::TreeBranchAux { tree: TreeAux::new() };
+        if !ancestors.is_empty() {
+                let first = ancestors.first().unwrap();
+                let mut comps = first.components();
+                let comp = comps.next_back().unwrap();
+                let comp: &Path = comp.as_ref();
+                if !self.entries.contains_key(comp) {
+                    self.entries.insert(comp.to_path_buf(), tea);
+                } 
+                let e: &mut TreeEntryAux = self.entries.get_mut(comp).unwrap();
+                match e {
+                    TreeEntryAux::TreeLeafAux { entry: _entry } => {}
+                    TreeEntryAux::TreeBranchAux { tree } => {
+                        if let Some((_, elements)) = ancestors.split_first() {
+                            tree.add_entry(elements.to_vec(), entry.clone())?;
+                        }
+                    }
+                }
+        } else {
+                let mut comps = entry.path.components();
+                let comp = comps.next_back().unwrap();
+                let comp: &Path = comp.as_ref();
+                let e = TreeEntryAux::TreeLeafAux {
+                    entry: entry.clone(),
+                };
+                self.entries.insert(comp.to_path_buf(), e);
+        }
+        Ok(())
+    }
 }
 
 impl Ord for TreeEntry {
@@ -34,11 +88,11 @@ impl Ord for TreeEntry {
     }
 }
 
-impl Display for TreeEntry{
+impl Display for TreeEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TreeEntry::TreeBranch { tree: _, name } => f.write_fmt(format_args!("{}", name)),
-            TreeEntry::TreeLeaf { entry: _, name } => f.write_fmt(format_args!("{}", name))
+            TreeEntry::TreeLeaf { entry: _, name } => f.write_fmt(format_args!("{}", name)),
         }
     }
 }
@@ -62,7 +116,6 @@ pub fn get_data(entries: &mut Vec<TreeEntry>) -> Result<Vec<u8>> {
             TreeEntry::TreeLeaf { entry: _, name: n1 },
             TreeEntry::TreeBranch { tree: _, name: n2 },
         ) => n1.cmp(&n2),
-
     });
     entries
         .into_iter()
@@ -94,6 +147,56 @@ pub fn get_data(entries: &mut Vec<TreeEntry>) -> Result<Vec<u8>> {
         })
         .collect::<Result<Vec<_>>>()?;
     Ok(acc_data)
+}
+// let mut comps = e.path.components();
+// let paths: Vec<_> =
+//     comps.map(|e| e.as_os_str() ).map(|e| Path::new(e).to_path_buf()).collect();
+pub fn build(entries_add: Vec<&EntryAdd>, db: &Database) -> Result<String> {
+    let mut root = TreeAux::new();
+    for e in entries_add.into_iter() {
+        let mut ancestors: Vec<_> = 
+            e.path.ancestors().filter(|en| en.to_path_buf() != e.path && en.exists()).map(|e| e.to_path_buf()).collect();
+        ancestors.reverse();
+        root.add_entry(ancestors, e.clone())?;
+    }
+    let mut trees = Vec::new();
+    for (entry, aux) in root.entries {
+        let t = Entry::build_entry(entry, aux, db)?;
+        trees.push(t)
+    }
+    let entries_data = get_data(&mut trees)?;
+
+    let length = entries_data.len();
+
+    let mut data = Vec::new();
+
+    data.extend_from_slice("tree".as_bytes());
+    data.push(0x20u8);
+    data.extend_from_slice(length.to_string().as_bytes());
+    data.push(0x00u8);
+    data.extend(entries_data);
+
+    let data_to_write = data;
+
+    let oid = hexdigest(&data_to_write);
+
+    db.write_object(oid.clone(), data_to_write)?;
+
+    Ok(oid)
+}
+
+pub fn print_tree_aux(tree: TreeAux, main_key: PathBuf) -> () {
+    println!(" -- sub-keys: {:?} of {:?} ", tree.entries.keys(), main_key);
+    for (entry, aux) in tree.entries {
+        match aux {
+            TreeEntryAux::TreeLeafAux { entry } => {
+                println!(" -- sub-value: {:?}", entry);
+            }
+            TreeEntryAux::TreeBranchAux { tree } => {
+                print_tree_aux(tree, entry);
+            }
+        }
+    }
 }
 
 pub fn print_tree(tree: Tree) -> () {
