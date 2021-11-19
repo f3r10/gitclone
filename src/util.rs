@@ -1,12 +1,7 @@
 use anyhow::Result;
 use data_encoding::HEXLOWER;
 use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY};
-use std::{
-    collections::HashMap,
-    fs::{self, Metadata},
-    os::unix::prelude::MetadataExt,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, env::current_dir, fs::{self, Metadata}, io, os::unix::prelude::MetadataExt, path::{Path, PathBuf}};
 
 use crate::Object;
 use crate::{Entry, EntryWrapper};
@@ -149,4 +144,31 @@ pub fn hexdigest_vec(data: &Vec<u8>) -> Vec<u8> {
     let digest = context.finish();
 
     digest.as_ref().to_vec()
+}
+
+
+pub fn flatten_dot(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
+    let mut e = 
+        paths.iter()
+        .flat_map(|e| {
+            if e.to_str().eq(&Some(".")) {
+                let current_dir = current_dir()?;
+                fs::read_dir(current_dir.clone())?
+                    .filter(|e| match e {
+                        Ok(p) => p.file_name() != ".git",
+                        Err(_e) => true,
+                    })
+                    // since all the path are taken from the current dir the strip_prefix will not
+                    // fail
+                    .map(|res| res.map(|e| e.path().strip_prefix(&current_dir).unwrap().to_path_buf()))
+                    .collect::<Result<Vec<_>, io::Error>>()
+            } else {
+                Ok(vec![e.to_path_buf()])
+            }
+        })
+    .flatten()
+        .collect::<Vec<PathBuf>>();
+    e.sort_by(|p1, p2| p1.cmp(p2));
+    e.dedup();
+    Ok(e)
 }

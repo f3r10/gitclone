@@ -39,6 +39,7 @@ impl Workspace {
     }
 
     pub fn create_tree_from_paths(&self, paths: Vec<PathBuf>) -> Result<TreeAux> {
+        let paths = util::flatten_dot(paths)?;
         let mut e_add = Vec::new();
         for path in paths.clone().iter() {
             if path.is_dir() {
@@ -73,32 +74,13 @@ impl Workspace {
     }
 
     pub fn build_add_tree(&self, root: TreeAux, db: &Database) -> Result<Tree> {
-        // let root = self.create_tree_from_paths(paths)?;
         let mut entries = Vec::new();
-        println!("entries {:?}", root.entries);
         for (entry, aux) in root.entries {
             let t = Entry::build_entry(entry, aux, db)?;
             entries.push(t)
         };
 
-        // let entries_data = util::get_data(&mut entries)?;
-
-        // let length = entries_data.len();
-
-        // let mut data = Vec::new();
-
-        // data.extend_from_slice("tree".as_bytes());
-        // data.push(0x20u8);
-        // data.extend_from_slice(length.to_string().as_bytes());
-        // data.push(0x00u8);
-        // data.extend(entries_data);
-
-        // let data_to_write = data;
-
-        // let oid = util::hexdigest_vec(&data_to_write);
         let tree = Tree::new(entries, self.pathname.clone());
-        //TODO add and commit are using the same
-        // db.write_object(&oid, data_to_write)?;
         Ok(tree)
     }
 
