@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{Object, util};
+use crate::{util, Object};
 
 pub struct Database {
     pathname: PathBuf,
@@ -47,4 +47,3 @@ impl Database {
         Ok(())
     }
 }
-

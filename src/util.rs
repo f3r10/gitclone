@@ -1,11 +1,17 @@
 use anyhow::Result;
 use data_encoding::HEXLOWER;
 use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY};
-use std::{collections::HashMap, env::current_dir, fs::{self, Metadata}, io, os::unix::prelude::MetadataExt, path::{Path, PathBuf}};
+use std::{
+    collections::HashMap,
+    env::current_dir,
+    fs::{self, Metadata},
+    io,
+    os::unix::prelude::MetadataExt,
+    path::{Path, PathBuf},
+};
 
 use crate::Object;
 use crate::{Entry, EntryWrapper};
-
 
 #[derive(Debug)]
 pub enum TreeEntryAux {
@@ -23,34 +29,39 @@ impl TreeAux {
             entries: HashMap::new(),
         }
     }
-    pub fn add_entry(&mut self, ancestors: Vec<PathBuf>, root_path: PathBuf, oid_o: Option<Vec<u8>>) -> Result<()> {
-        let tea = TreeEntryAux::TreeBranchAux { tree: TreeAux::new() };
+    pub fn add_entry(
+        &mut self,
+        ancestors: Vec<PathBuf>,
+        root_path: PathBuf,
+        oid_o: Option<Vec<u8>>,
+    ) -> Result<()> {
+        let tea = TreeEntryAux::TreeBranchAux {
+            tree: TreeAux::new(),
+        };
         if !ancestors.is_empty() {
-                let first = ancestors.first().unwrap();
-                let mut comps = first.components();
-                let comp = comps.next_back().unwrap();
-                let comp: &Path = comp.as_ref();
-                if !self.entries.contains_key(comp) {
-                    self.entries.insert(comp.to_path_buf(), tea);
-                } 
-                let e: &mut TreeEntryAux = self.entries.get_mut(comp).unwrap();
-                match e {
-                    TreeEntryAux::TreeLeafAux { entry: _entry } => {}
-                    TreeEntryAux::TreeBranchAux { tree } => {
-                        if let Some((_, elements)) = ancestors.split_first() {
-                            tree.add_entry(elements.to_vec(), root_path.to_path_buf(), oid_o)?;
-                        }
+            let first = ancestors.first().unwrap();
+            let mut comps = first.components();
+            let comp = comps.next_back().unwrap();
+            let comp: &Path = comp.as_ref();
+            if !self.entries.contains_key(comp) {
+                self.entries.insert(comp.to_path_buf(), tea);
+            }
+            let e: &mut TreeEntryAux = self.entries.get_mut(comp).unwrap();
+            match e {
+                TreeEntryAux::TreeLeafAux { entry: _entry } => {}
+                TreeEntryAux::TreeBranchAux { tree } => {
+                    if let Some((_, elements)) = ancestors.split_first() {
+                        tree.add_entry(elements.to_vec(), root_path.to_path_buf(), oid_o)?;
                     }
                 }
+            }
         } else {
-                let mut comps = root_path.components();
-                let comp = comps.next_back().unwrap();
-                let comp: &Path = comp.as_ref();
-                let e = Entry::new(&root_path, oid_o)?;
-                let leaf = TreeEntryAux::TreeLeafAux {
-                    entry: e,
-                };
-                self.entries.insert(comp.to_path_buf(), leaf);
+            let mut comps = root_path.components();
+            let comp = comps.next_back().unwrap();
+            let comp: &Path = comp.as_ref();
+            let e = Entry::new(&root_path, oid_o)?;
+            let leaf = TreeEntryAux::TreeLeafAux { entry: e };
+            self.entries.insert(comp.to_path_buf(), leaf);
         }
         Ok(())
     }
@@ -91,11 +102,11 @@ pub fn get_data(entries: &mut Vec<EntryWrapper>) -> Result<Vec<u8>> {
                 data.push(0x20u8);
                 data.extend_from_slice(
                     tree.parent
-                    .file_name()
-                    .expect("unable to get filename")
-                    .to_str()
-                    .expect("invalid filename")
-                    .as_bytes(),
+                        .file_name()
+                        .expect("unable to get filename")
+                        .to_str()
+                        .expect("invalid filename")
+                        .as_bytes(),
                 );
                 data.push(0x00u8);
                 data.extend_from_slice(&oid);
@@ -146,10 +157,9 @@ pub fn hexdigest_vec(data: &Vec<u8>) -> Vec<u8> {
     digest.as_ref().to_vec()
 }
 
-
 pub fn flatten_dot(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
-    let mut e = 
-        paths.iter()
+    let mut e = paths
+        .iter()
         .flat_map(|e| {
             if e.to_str().eq(&Some(".")) {
                 let current_dir = current_dir()?;
@@ -160,13 +170,15 @@ pub fn flatten_dot(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
                     })
                     // since all the path are taken from the current dir the strip_prefix will not
                     // fail
-                    .map(|res| res.map(|e| e.path().strip_prefix(&current_dir).unwrap().to_path_buf()))
+                    .map(|res| {
+                        res.map(|e| e.path().strip_prefix(&current_dir).unwrap().to_path_buf())
+                    })
                     .collect::<Result<Vec<_>, io::Error>>()
             } else {
                 Ok(vec![e.to_path_buf()])
             }
         })
-    .flatten()
+        .flatten()
         .collect::<Vec<PathBuf>>();
     e.sort_by(|p1, p2| p1.cmp(p2));
     e.dedup();

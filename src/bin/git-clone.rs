@@ -54,9 +54,7 @@ fn main() -> Result<()> {
                     );
                     Ok(())
                 }
-                Err(e) => {
-                    Err(anyhow!(e))
-                }
+                Err(e) => Err(anyhow!(e)),
             }
         }
         ("add", Some(_matches)) => {
@@ -77,9 +75,7 @@ fn main() -> Result<()> {
                     index.write_updates()?;
                     Ok(())
                 }
-                Err(e) => {
-                    Err(anyhow!(e))
-                }
+                Err(e) => Err(anyhow!(e)),
             }
         }
         ("commit", Some(_matches)) => {
@@ -141,9 +137,7 @@ fn main() -> Result<()> {
                         }
                     }
                 }
-                Err(e) => {
-                    Err(anyhow!(e))
-                }
+                Err(e) => Err(anyhow!(e)),
             }
         }
         _ => unreachable!(),

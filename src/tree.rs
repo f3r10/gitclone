@@ -1,6 +1,9 @@
 use anyhow::Result;
 
-use crate::{Database, Entry, EntryWrapper, Object, util::{self, TreeEntryAux}};
+use crate::{
+    util::{self, TreeEntryAux},
+    Database, Entry, EntryWrapper, Object,
+};
 use core::fmt;
 use std::{collections::HashMap, fmt::Display, path::PathBuf};
 
@@ -22,13 +25,13 @@ impl Object for Tree {
     }
 
     fn get_oid(&mut self) -> Result<Vec<u8>> {
-         match &self.oid  {
-             Some(oid) => Ok(oid.to_vec()),
-             None => {
-                 let digest = util::hexdigest_vec(&self.get_data_to_write()?);
-                 self.set_oid(&digest);
-                 Ok(digest)
-             }
+        match &self.oid {
+            Some(oid) => Ok(oid.to_vec()),
+            None => {
+                let digest = util::hexdigest_vec(&self.get_data_to_write()?);
+                self.set_oid(&digest);
+                Ok(digest)
+            }
         }
     }
 }
@@ -50,13 +53,11 @@ impl Tree {
     pub fn save_tree(&mut self, db: &Database) -> Result<()> {
         for e in self.entries.iter_mut() {
             match e {
-                EntryWrapper::Entry { entry: _, name: _ } => {
-
-                },
+                EntryWrapper::Entry { entry: _, name: _ } => {}
                 EntryWrapper::EntryTree { tree: t, name: _ } => {
                     t.save_tree(&db)?;
                     db.store(t)?;
-                },
+                }
             }
         }
         db.store(self)?;
@@ -79,17 +80,20 @@ impl Tree {
         Ok(data_to_write)
     }
 
-    pub fn build_tree(root_path: PathBuf, entries: HashMap<PathBuf, TreeEntryAux>, db: &Database) -> Result<EntryWrapper> {
-
+    pub fn build_tree(
+        root_path: PathBuf,
+        entries: HashMap<PathBuf, TreeEntryAux>,
+        db: &Database,
+    ) -> Result<EntryWrapper> {
         let mut final_entries: Vec<EntryWrapper> = Vec::new();
         for (key, value) in entries {
             let entry = Entry::build_entry(key, value, db)?;
             final_entries.push(entry);
-        };
+        }
         let tree = Tree::new(final_entries, root_path.to_path_buf());
 
         let tree_wrapper = EntryWrapper::EntryTree {
-            tree: tree,
+            tree,
             name: root_path
                 .file_name()
                 .expect("unable to get filename")

@@ -1,9 +1,12 @@
 use std::{fs, path::PathBuf};
 
-use anyhow::Result;
 use anyhow::anyhow;
+use anyhow::Result;
 
-use crate::{Database, Entry, EntryAdd, EntryWrapper, Index, Tree, util::{self, TreeAux}};
+use crate::{
+    util::{self, TreeAux},
+    Database, Entry, EntryAdd, EntryWrapper, Index, Tree,
+};
 
 pub struct Workspace {
     pathname: PathBuf,
@@ -23,18 +26,19 @@ impl Workspace {
                 Ok(p) => p.file_name() != ".git" && p.file_name() != "target",
                 Err(_e) => true,
             })
-        .flat_map(|er| er.map(|e| {
-            let inner_path = e.path();
-            if inner_path.is_dir() {
-                self.list_files(&inner_path)
-            } else {
-                Ok(vec!(inner_path))
-            }
-
-        }))
-        .flatten()
-        .flatten()
-        .collect::<Vec<_>>();
+            .flat_map(|er| {
+                er.map(|e| {
+                    let inner_path = e.path();
+                    if inner_path.is_dir() {
+                        self.list_files(&inner_path)
+                    } else {
+                        Ok(vec![inner_path])
+                    }
+                })
+            })
+            .flatten()
+            .flatten()
+            .collect::<Vec<_>>();
         Ok(res)
     }
 
@@ -48,25 +52,30 @@ impl Workspace {
             } else {
                 e_add.push(path.to_path_buf())
             }
-
         }
 
         let mut root = TreeAux::new();
         for e in e_add.into_iter() {
-            let mut ancestors: Vec<_> = 
-                e.ancestors().filter(|en| en.to_path_buf() != e && en.exists()).map(|e| e.to_path_buf()).collect();
+            let mut ancestors: Vec<_> = e
+                .ancestors()
+                .filter(|en| en.to_path_buf() != e && en.exists())
+                .map(|e| e.to_path_buf())
+                .collect();
             ancestors.reverse();
             root.add_entry(ancestors, e, None)?;
         }
         Ok(root)
-
     }
 
     pub fn create_tree_from_index(&self, entries_add: Vec<&EntryAdd>) -> Result<TreeAux> {
         let mut root = TreeAux::new();
         for e in entries_add.into_iter() {
-            let mut ancestors: Vec<_> = 
-                e.path.ancestors().filter(|en| en.to_path_buf() != e.path && en.exists()).map(|e| e.to_path_buf()).collect();
+            let mut ancestors: Vec<_> = e
+                .path
+                .ancestors()
+                .filter(|en| en.to_path_buf() != e.path && en.exists())
+                .map(|e| e.to_path_buf())
+                .collect();
             ancestors.reverse();
             root.add_entry(ancestors, e.path.to_path_buf(), Some(e.oid.to_vec()))?;
         }
@@ -78,7 +87,7 @@ impl Workspace {
         for (entry, aux) in root.entries {
             let t = Entry::build_entry(entry, aux, db)?;
             entries.push(t)
-        };
+        }
 
         let tree = Tree::new(entries, self.pathname.clone());
         Ok(tree)
@@ -92,13 +101,15 @@ impl Workspace {
                     match &e.oid {
                         Some(oid) => {
                             index.add(e.path.to_path_buf(), oid.to_vec(), stat)?;
-                        },
+                        }
                         None => {
                             anyhow!("Unable to build entry because there is not a valid oid");
-                        },
-                    } 
-                } ,
-                EntryWrapper::EntryTree { tree, name: _ } => self.create_index_entry(&tree, db, index)?,
+                        }
+                    }
+                }
+                EntryWrapper::EntryTree { tree, name: _ } => {
+                    self.create_index_entry(&tree, db, index)?
+                }
             }
         }
         Ok(())

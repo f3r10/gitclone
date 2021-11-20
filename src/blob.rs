@@ -3,8 +3,7 @@ use std::{fmt::Display, path::PathBuf};
 
 use anyhow::Result;
 
-use crate::{Object, util};
-
+use crate::{util, Object};
 
 #[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
 pub struct Blob {
@@ -23,23 +22,22 @@ impl Object for Blob {
     }
 
     fn get_oid(&mut self) -> Result<Vec<u8>> {
-         match &self.oid  {
-             Some(oid) => Ok(oid.to_vec()),
-             None => {
-                 let digest = util::hexdigest_vec(&self.get_data_to_write()?);
-                 self.set_oid(&digest);
-                 Ok(digest)
-             }
+        match &self.oid {
+            Some(oid) => Ok(oid.to_vec()),
+            None => {
+                let digest = util::hexdigest_vec(&self.get_data_to_write()?);
+                self.set_oid(&digest);
+                Ok(digest)
+            }
         }
     }
 }
 
 impl Blob {
-
     pub fn new(path_buf: PathBuf) -> Result<Blob> {
         Ok(Blob {
-            pathbuf : path_buf.clone(),
-            type_ : "blob".to_string(),
+            pathbuf: path_buf.clone(),
+            type_: "blob".to_string(),
             oid: None,
         })
     }
@@ -68,6 +66,15 @@ impl Blob {
 
 impl Display for Blob {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!("{}", &self.pathbuf.file_name().expect("unable to get filename").to_str().expect("invalid filename").to_string()))
+        f.write_fmt(format_args!(
+            "{}",
+            &self
+                .pathbuf
+                .file_name()
+                .expect("unable to get filename")
+                .to_str()
+                .expect("invalid filename")
+                .to_string()
+        ))
     }
 }

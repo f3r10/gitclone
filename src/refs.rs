@@ -1,4 +1,8 @@
-use std::{fs::{self, OpenOptions}, io::Write, path::PathBuf};
+use std::{
+    fs::{self, OpenOptions},
+    io::Write,
+    path::PathBuf,
+};
 
 use anyhow::Result;
 
@@ -8,7 +12,9 @@ pub struct Refs {
 
 impl Refs {
     pub fn new(path_buf: &PathBuf) -> Self {
-        Refs { pathname: path_buf.into() }
+        Refs {
+            pathname: path_buf.into(),
+        }
     }
 
     pub fn update_head(&self, oid: String) -> Result<()> {

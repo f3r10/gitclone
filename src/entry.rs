@@ -1,9 +1,12 @@
 use std::{fmt::Display, path::PathBuf};
 
-use anyhow::Result;
 use anyhow::anyhow;
+use anyhow::Result;
 
-use crate::{Blob, Database, Object, Tree, util::{self, TreeEntryAux}};
+use crate::{
+    util::{self, TreeEntryAux},
+    Blob, Database, Object, Tree,
+};
 
 #[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
 pub enum EntryWrapper {
@@ -35,7 +38,11 @@ impl Entry {
             path: path.to_path_buf(),
         })
     }
-    pub fn build_entry(root_path: PathBuf, aux: TreeEntryAux, db: &Database) -> Result<EntryWrapper> {
+    pub fn build_entry(
+        root_path: PathBuf,
+        aux: TreeEntryAux,
+        db: &Database,
+    ) -> Result<EntryWrapper> {
         match aux {
             TreeEntryAux::TreeLeafAux { entry } => {
                 let mut n_entry: Entry;
@@ -47,7 +54,7 @@ impl Entry {
                     n_entry = entry.clone();
                     n_entry.oid = Some(blob.get_oid()?);
                 }
-                
+
                 let leaf = EntryWrapper::Entry {
                     entry: n_entry,
                     name: entry.name,
@@ -70,10 +77,8 @@ impl Entry {
                 data.push(0x00u8);
                 data.extend_from_slice(oid);
                 Ok(data)
-            },
-            None => {
-                Err(anyhow!("unable to get blob oid"))
-            },
+            }
+            None => Err(anyhow!("unable to get blob oid")),
         }
     }
 }

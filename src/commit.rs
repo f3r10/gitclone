@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{Author, Object, util};
+use crate::{util, Author, Object};
 
 pub struct Commit {
     tree_ref: String,
@@ -21,13 +21,13 @@ impl Object for Commit {
     }
 
     fn get_oid(&mut self) -> Result<Vec<u8>> {
-         match &self.oid  {
-             Some(oid) => Ok(oid.to_vec()),
-             None => {
-                 let digest = util::hexdigest_vec(&self.get_data_to_write()?);
-                 self.set_oid(&digest);
-                 Ok(digest)
-             }
+        match &self.oid {
+            Some(oid) => Ok(oid.to_vec()),
+            None => {
+                let digest = util::hexdigest_vec(&self.get_data_to_write()?);
+                self.set_oid(&digest);
+                Ok(digest)
+            }
         }
     }
 }
@@ -47,7 +47,9 @@ impl Commit {
     fn get_data_to_write(&self) -> Result<Vec<u8>> {
         let mut lines = Vec::new();
         lines.push(format!("tree {}", &self.tree_ref));
-        self.parent.as_ref().map(|e| lines.push(format!("parent {}", e)));
+        self.parent
+            .as_ref()
+            .map(|e| lines.push(format!("parent {}", e)));
         lines.push(format!("author {}", &self.author.to_s()));
         lines.push(format!("commiter {}", &self.author.to_s()));
         lines.push("".to_string());

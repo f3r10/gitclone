@@ -1,3 +1,5 @@
+use anyhow::anyhow;
+use byteorder::{BigEndian, ReadBytesExt};
 use std::char;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -6,19 +8,17 @@ use std::fs::Metadata;
 use std::fs::OpenOptions;
 use std::path::Path;
 use std::{io::Write, os::unix::prelude::MetadataExt, path::PathBuf, u16, u8, usize};
-use anyhow::anyhow;
-use byteorder::{BigEndian, ReadBytesExt};
 
 use anyhow::Result;
 
-use crate::Checksum;
 use crate::util;
+use crate::Checksum;
 
 pub struct Index {
     pathname: PathBuf,
     entries: HashMap<String, EntryAdd>,
     keys: BTreeSet<String>,
-    changed: bool
+    changed: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -44,14 +44,22 @@ const EXECUTABLE_MODE: u32 = 0o100755_u32;
 const MAX_PATH_SIZE: u16 = 0xfff;
 
 impl EntryAdd {
-
     pub fn get_data_to_tree(&self) -> Result<Vec<u8>> {
         let mut data = Vec::new();
         let mode = util::get_mode(self.path.to_path_buf())?;
 
         data.extend_from_slice(mode.as_bytes());
         data.push(0x20u8);
-        data.extend_from_slice(&self.path.file_name().unwrap().to_str().unwrap().to_string().as_bytes());
+        data.extend_from_slice(
+            &self
+                .path
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string()
+                .as_bytes(),
+        );
         data.push(0x00u8);
         data.extend_from_slice(&self.oid);
         Ok(data)
@@ -111,17 +119,19 @@ impl EntryAdd {
 
     fn parse(entry: Vec<u8>) -> Result<EntryAdd> {
         let mut stats = Vec::new();
-        let ( numbers_vec, tail ) = entry.split_at(40);
+        let (numbers_vec, tail) = entry.split_at(40);
         let (oid, tail) = tail.split_at(20);
         let oid = oid.to_vec();
         let (mut flag_vec, path_vec) = tail.split_at(2);
-        let path = String::from_utf8(path_vec.to_vec())?.trim_matches(char::from(0)).to_string();
+        let path = String::from_utf8(path_vec.to_vec())?
+            .trim_matches(char::from(0))
+            .to_string();
         let path = Path::new(&path).to_path_buf();
         let flags = flag_vec.read_u16::<BigEndian>()?;
         for mut chunk in numbers_vec.chunks_exact(4) {
             stats.push(chunk.read_u32::<BigEndian>()?)
         }
-        let e = EntryAdd{
+        let e = EntryAdd {
             ctime: stats[0],
             ctime_nsec: stats[1],
             mtime: stats[2],
@@ -143,14 +153,14 @@ impl EntryAdd {
 const HEADER_SIZE: usize = 12;
 const SIGNATURE: &str = "DIRC";
 const VERSION: u32 = 2;
-const ENTRY_MIN_SIZE: usize = 64; 
+const ENTRY_MIN_SIZE: usize = 64;
 impl Index {
     pub fn new(pathname: PathBuf) -> Self {
         Index {
             pathname,
             entries: HashMap::new(),
             keys: BTreeSet::new(),
-            changed: false
+            changed: false,
         }
     }
 
@@ -194,10 +204,16 @@ impl Index {
         // println!("data2: {:?}", u32::from_be_bytes(t1[..]));
         // println!("data2: {:?}", BigEndian::read_u32(&chunks[1][..]));
         if signature != SIGNATURE {
-            return Err(anyhow!(format!("Signature: expected: {} but found {}", SIGNATURE, signature)))
+            return Err(anyhow!(format!(
+                "Signature: expected: {} but found {}",
+                SIGNATURE, signature
+            )));
         }
         if version != VERSION {
-            return Err(anyhow!(format!("Version: expected: {} but found {}", VERSION, version)))
+            return Err(anyhow!(format!(
+                "Version: expected: {} but found {}",
+                VERSION, version
+            )));
         }
         Ok(count)
     }
@@ -219,7 +235,9 @@ impl Index {
 
     pub fn each_entry(&self) -> Result<Vec<&EntryAdd>> {
         let mut entries: Vec<&EntryAdd> = Vec::new();
-        self.keys.iter().for_each(|k| entries.push(self.entries.get(k).unwrap()));
+        self.keys
+            .iter()
+            .for_each(|k| entries.push(self.entries.get(k).unwrap()));
         Ok(entries)
     }
 

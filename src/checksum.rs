@@ -1,22 +1,24 @@
-use std::{fs::File, io::{BufReader, Read}};
+use std::{
+    fs::File,
+    io::{BufReader, Read},
+};
 
-use anyhow::Result;
 use anyhow::anyhow;
+use anyhow::Result;
 use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY};
 
 pub struct Checksum {
     reader: BufReader<File>,
-    context: Context
+    context: Context,
 }
 
 const CHECKSUM_SIZE: usize = 20;
 
-
 impl Checksum {
     pub fn new(file: File) -> Self {
-        Checksum { 
+        Checksum {
             reader: BufReader::new(file),
-            context: Context::new(&SHA1_FOR_LEGACY_USE_ONLY)
+            context: Context::new(&SHA1_FOR_LEGACY_USE_ONLY),
         }
     }
 
@@ -31,9 +33,9 @@ impl Checksum {
 
     pub fn verify_checksum(mut self) -> Result<()> {
         let sum = self.read(CHECKSUM_SIZE, false)?;
-        let digest = self.context.finish().as_ref().to_vec();  
+        let digest = self.context.finish().as_ref().to_vec();
         if sum != digest {
-            return Err(anyhow!("Checksum does not match value stored on disk"))
+            return Err(anyhow!("Checksum does not match value stored on disk"));
         }
         Ok(())
     }
