@@ -2,16 +2,16 @@ use anyhow::Result;
 
 use crate::{util, Author, Object};
 
-pub struct Commit {
-    tree_ref: String,
+pub struct Commit<'a> {
+    tree_ref: &'a str,
     author: Author,
     parent: Option<String>,
     message: String,
-    type_: String,
+    type_: &'a str,
     oid: Option<Vec<u8>>,
 }
 
-impl Object for Commit {
+impl Object for Commit<'_> {
     fn get_data(&self) -> Result<Vec<u8>> {
         self.get_data_to_write()
     }
@@ -32,14 +32,14 @@ impl Object for Commit {
     }
 }
 
-impl Commit {
-    pub fn new(tree_ref: String, author: Author, message: String, parent: Option<String>) -> Self {
+impl Commit<'_> {
+    pub fn new<'a>(tree_ref: &'a str, author: Author, message: String, parent: Option<String>) -> Commit<'a> {
         Commit {
             tree_ref,
             author,
             parent,
             message,
-            type_: "commit".to_string(),
+            type_: "commit",
             oid: None,
         }
     }

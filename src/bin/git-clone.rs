@@ -111,8 +111,9 @@ fn main() -> Result<()> {
                             let parent = refs.read_head();
                             let current_time = Local::now();
                             let author = Author::new(author, email, current_time);
+                            let oid  = util::encode_vec(&oid);
                             let mut commit = Commit::new(
-                                util::encode_vec(&oid),
+                                &oid,
                                 author,
                                 message.to_string(),
                                 parent.clone(),
