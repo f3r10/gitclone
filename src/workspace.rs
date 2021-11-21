@@ -50,7 +50,11 @@ impl Workspace {
                 let mut res = self.list_files(path)?;
                 e_add.append(&mut res);
             } else {
-                e_add.push(path.to_path_buf())
+                if path.exists() {
+                    e_add.push(path.to_path_buf())
+                } else {
+                    return Err(anyhow!(format!("pathspec {:?} did not match any files", &path)))
+                }
             }
         }
 
