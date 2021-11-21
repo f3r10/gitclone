@@ -228,8 +228,27 @@ impl Index {
     pub fn add(&mut self, pathname: PathBuf, oid: Vec<u8>, stat: Metadata) -> Result<()> {
         // let path = pathname.to_str().unwrap();
         let entry = EntryAdd::create(pathname.clone(), oid, stat)?;
+        self.discard_conflicts(&entry)?;
         self.store_entry(entry)?;
         self.changed = true;
+        Ok(())
+    }
+
+    pub fn discard_conflicts(&mut self, entry: &EntryAdd) -> Result<()> {
+        for parent in entry.path.ancestors() {
+            let parent_str = parent.to_str().ok_or(anyhow!("unable to get parent filename"))?;
+            self.keys.remove(parent_str);
+            self.entries.remove(parent_str);
+        }
+        let entry_name = entry.path.to_str().ok_or(anyhow!("unable to get filename"))?;
+
+        // TODO these two methods iterate over the entire elements which can be really expensive
+        // depending on how many keys the collections have.
+        // The alternative would be to create another HashMap where we can store:
+        // {Parent -> [Child]}, so if it would be a conflicting file name with a dir name, it
+        // would be necessary to get the corresponding [child] list to remove from the self.entries.
+        self.entries.retain(|k, _| !k.contains(entry_name));
+        self.keys.retain(|k| !k.contains(entry_name));
         Ok(())
     }
 
