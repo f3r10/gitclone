@@ -242,9 +242,9 @@ impl Index {
         }
         let entry_name = entry.path.to_str().ok_or(anyhow!("unable to get filename"))?;
 
-        // TODO these two methods iterate over the entire elements which can be really expensive
+        // TODO these two methods iterate over all the elements which can be really expensive
         // depending on how many keys the collections have.
-        // The alternative would be to create another HashMap where we can store:
+        // The alternative would be to create another HashMap where it should be stored:
         // {Parent -> [Child]}, so if it would be a conflicting file name with a dir name, it
         // would be necessary to get the corresponding [child] list to remove from the self.entries.
         self.entries.retain(|k, _| !k.contains(entry_name));
