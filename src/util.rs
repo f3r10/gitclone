@@ -1,4 +1,5 @@
 use anyhow::Result;
+use anyhow::anyhow;
 use data_encoding::HEXLOWER;
 use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY};
 use std::{
@@ -120,12 +121,14 @@ pub fn get_data(entries: &mut Vec<EntryWrapper>) -> Result<Vec<u8>> {
 }
 
 pub fn read_file(path: PathBuf) -> Result<Vec<u8>> {
-    let res = fs::read(path)?;
+    let msg = format!("open ('{:?}'): Permission denied", &path);
+    let res = fs::read(path).map_err(|_| anyhow!(msg))?;
     Ok(res)
 }
 
 pub fn stat_file(path: PathBuf) -> Result<Metadata> {
-    let metadata = fs::metadata(path)?;
+    let msg = format!("stat ('{:?}'): Permission denied", &path);
+    let metadata = fs::metadata(path).map_err(|_| anyhow!(msg))?;
     Ok(metadata)
 }
 
