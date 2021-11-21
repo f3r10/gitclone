@@ -20,7 +20,8 @@ impl Database {
         }
     }
 
-    pub fn store(&self, object: &mut dyn Object) -> Result<()> {
+    // pub fn store(&self, object: &mut dyn Object) -> Result<()> {
+    pub fn store<W: Object>(&self, object: &mut W) -> Result<()> {
         let data = object.get_data()?;
         self.write_object(&object.get_oid()?, data)
     }
