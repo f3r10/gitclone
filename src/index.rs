@@ -46,6 +46,11 @@ impl EntryAdd {
         let path = self.path.to_path_buf();
         path.file_name().unwrap().to_str().unwrap().to_string()
     }
+
+    pub fn get_path(&self) -> String {
+        let path = self.path.to_path_buf();
+        path.to_str().unwrap().to_string()
+    }
     pub fn get_mode(&self) -> Result<u32> {
         let mode = self.mode;
         Ok(mode)
@@ -179,7 +184,6 @@ impl Index {
         let count = &self.read_header(&mut reader)?;
         self.read_entries(&mut reader, *count)?;
         reader.verify_checksum()?;
-        println!("count files index: {:?}", count);
         Ok(())
     }
 
