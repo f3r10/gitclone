@@ -2,12 +2,13 @@ use anyhow::Result;
 use anyhow::anyhow;
 use data_encoding::HEXLOWER;
 use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY};
+use std::fs::File;
+use std::os::unix::prelude::PermissionsExt;
 use std::{
     collections::HashMap,
     env::current_dir,
     fs::{self, Metadata},
     io,
-    os::unix::prelude::MetadataExt,
     path::{Path, PathBuf},
 };
 
@@ -134,15 +135,18 @@ pub fn stat_file(path: PathBuf) -> Result<Metadata> {
 
 fn is_executable(entry: &PathBuf) -> Result<bool> {
     let metadata = fs::metadata(entry)?;
-    let unix_mode = metadata.mode();
+    let unix_mode = metadata.permissions().mode();
     Ok((unix_mode & 0o001) != 0)
 }
-pub fn get_mode(path_buf: PathBuf) -> Result<String> {
+
+const REGULAR_MODE: u32 = 0o100644;
+const EXECUTABLE_MODE: u32 = 0o100755;
+pub fn get_mode(path_buf: PathBuf) -> Result<u32> {
     let entry = &path_buf;
     if is_executable(entry)? {
-        Ok("100755".to_string())
+        Ok(EXECUTABLE_MODE)
     } else {
-        Ok("100644".to_string())
+        Ok(REGULAR_MODE)
     }
 }
 
@@ -186,4 +190,38 @@ pub fn flatten_dot(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     e.sort_by(|p1, p2| p1.cmp(p2));
     e.dedup();
     Ok(e)
+}
+
+
+pub fn list_files(path: &PathBuf) -> Result<Vec<PathBuf>> {
+    let res = fs::read_dir(path)?
+        .into_iter()
+        .filter(|e| match e {
+            Ok(p) => p.file_name() != ".git" && p.file_name() != "target",
+            Err(_e) => true,
+        })
+    .flat_map(|er| {
+        er.map(|e| {
+            let inner_path = e.path();
+            if inner_path.is_dir() {
+                list_files(&inner_path)
+            } else {
+                Ok(vec![inner_path])
+            }
+        })
+    })
+    .flatten()
+        .flatten()
+        .collect::<Vec<_>>();
+    Ok(res)
+}
+
+pub fn write_file (root_path: &PathBuf, paths: Vec<&str>) -> Result<Vec<PathBuf>> {
+    let mut final_paths = Vec::new();
+    for p in paths.iter() {
+        let path = root_path.join(p);
+        File::create(path)?;
+        final_paths.push(Path::new(p).to_path_buf());
+    }
+    Ok(final_paths)
 }

@@ -18,7 +18,7 @@ pub enum EntryWrapper {
 pub struct Entry {
     pub name: String,
     pub oid: Option<Vec<u8>>,
-    pub mode: String,
+    pub mode: u32,
     pub path: PathBuf,
 }
 
@@ -71,7 +71,7 @@ impl Entry {
         let mut data = Vec::new();
         match &self.oid {
             Some(oid) => {
-                data.extend_from_slice(self.mode.as_bytes());
+                data.extend_from_slice(&self.mode.to_be_bytes());
                 data.push(0x20u8);
                 data.extend_from_slice(self.name.as_bytes());
                 data.push(0x00u8);

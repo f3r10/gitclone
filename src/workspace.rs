@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::path::PathBuf;
 
 use anyhow::anyhow;
 use anyhow::Result;
@@ -19,35 +19,12 @@ impl Workspace {
         }
     }
 
-    pub fn list_files(&self, path: &PathBuf) -> Result<Vec<PathBuf>> {
-        let res = fs::read_dir(path)?
-            .into_iter()
-            .filter(|e| match e {
-                Ok(p) => p.file_name() != ".git" && p.file_name() != "target",
-                Err(_e) => true,
-            })
-            .flat_map(|er| {
-                er.map(|e| {
-                    let inner_path = e.path();
-                    if inner_path.is_dir() {
-                        self.list_files(&inner_path)
-                    } else {
-                        Ok(vec![inner_path])
-                    }
-                })
-            })
-            .flatten()
-            .flatten()
-            .collect::<Vec<_>>();
-        Ok(res)
-    }
-
     pub fn create_tree_from_paths(&self, paths: Vec<PathBuf>) -> Result<TreeAux> {
         let paths = util::flatten_dot(paths)?;
         let mut e_add = Vec::new();
         for path in paths.clone().iter() {
             if path.is_dir() {
-                let mut res = self.list_files(path)?;
+                let mut res = util::list_files(path)?;
                 e_add.append(&mut res);
             } else {
                 if path.exists() {

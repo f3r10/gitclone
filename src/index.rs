@@ -39,16 +39,22 @@ pub struct EntryAdd {
 }
 
 const ENTRY_BLOCK: usize = 8;
-const REGULAR_MODE: u32 = 0o100644_u32;
-const EXECUTABLE_MODE: u32 = 0o100755_u32;
 const MAX_PATH_SIZE: u16 = 0xfff;
 
 impl EntryAdd {
+    pub fn get_name(&self) -> String {
+        let path = self.path.to_path_buf();
+        path.file_name().unwrap().to_str().unwrap().to_string()
+    }
+    pub fn get_mode(&self) -> Result<u32> {
+        let mode = self.mode;
+        Ok(mode)
+    }
     pub fn get_data_to_tree(&self) -> Result<Vec<u8>> {
         let mut data = Vec::new();
         let mode = util::get_mode(self.path.to_path_buf())?;
 
-        data.extend_from_slice(mode.as_bytes());
+        data.extend_from_slice(&mode.to_be_bytes());
         data.push(0x20u8);
         data.extend_from_slice(
             &self
@@ -89,11 +95,7 @@ impl EntryAdd {
 
     fn create(pathname: PathBuf, oid: Vec<u8>, stat: Metadata) -> Result<Self> {
         let path = pathname.to_str().unwrap();
-        let mode = if (stat.mode() & 0o001) != 0 {
-            EXECUTABLE_MODE
-        } else {
-            REGULAR_MODE
-        };
+        let mode =  util::get_mode(pathname.to_path_buf())?;
         let flags = std::cmp::min(path.bytes().len() as u16, MAX_PATH_SIZE);
         let entry = EntryAdd {
             ctime: stat.ctime() as u32,
@@ -155,9 +157,9 @@ const SIGNATURE: &str = "DIRC";
 const VERSION: u32 = 2;
 const ENTRY_MIN_SIZE: usize = 64;
 impl Index {
-    pub fn new(pathname: PathBuf) -> Self {
+    pub fn new(pathname: &PathBuf) -> Self {
         Index {
-            pathname,
+            pathname: pathname.to_path_buf(),
             entries: HashMap::new(),
             keys: BTreeSet::new(),
             changed: false,
