@@ -133,7 +133,7 @@ pub fn stat_file(path: PathBuf) -> Result<Metadata> {
     Ok(metadata)
 }
 
-fn is_executable(entry: &PathBuf) -> Result<bool> {
+pub fn is_executable(entry: &PathBuf) -> Result<bool> {
     let metadata = fs::metadata(entry)?;
     let unix_mode = metadata.permissions().mode();
     Ok((unix_mode & 0o001) != 0)
@@ -216,12 +216,22 @@ pub fn list_files(path: &PathBuf) -> Result<Vec<PathBuf>> {
     Ok(res)
 }
 
-pub fn write_file (root_path: &PathBuf, paths: Vec<&str>) -> Result<Vec<PathBuf>> {
+pub fn write_file (root_path: &PathBuf, paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     let mut final_paths = Vec::new();
     for p in paths.iter() {
-        let path = root_path.join(p);
-        File::create(path)?;
-        final_paths.push(Path::new(p).to_path_buf());
+        match p.parent() {
+            Some(parent) if parent.file_name().is_some() => {
+                let path = root_path.join(parent);
+                fs::create_dir_all(&path)?;
+                File::create(&p)?;
+                final_paths.push(Path::new(p).to_path_buf());
+            },
+            None | Some(_) => {
+                let path = root_path.join(p);
+                File::create(&path)?;
+                final_paths.push(Path::new(p).to_path_buf());
+            },
+        }
     }
     Ok(final_paths)
 }
