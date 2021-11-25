@@ -19,6 +19,13 @@ impl Workspace {
         }
     }
 
+    pub fn list_files(&self) -> Result<Vec<PathBuf>> {
+        let res = util::list_files(&self.pathname)?.iter().map(|e| {
+            e.strip_prefix(&self.pathname).unwrap().to_path_buf()
+        }).collect::<Vec<_>>();
+        Ok(res)
+    }
+
     pub fn create_tree_from_paths(&self, paths: Vec<PathBuf>) -> Result<TreeAux> {
         let paths = util::flatten_dot(paths)?;
         let mut e_add = Vec::new();

@@ -290,6 +290,10 @@ impl Index {
         file.write_all(&data_to_write)?;
         Ok(())
     }
+
+    pub fn is_tracked(&self, path: PathBuf) -> bool {
+        self.entries.contains_key(&path.to_str().unwrap().to_string())
+    }
 }
 
 // 00000000  44 49 52 43 00 00 00 02  00 00 00 01 61 83 28 ca  |DIRC........a.(.|

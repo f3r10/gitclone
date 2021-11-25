@@ -28,6 +28,21 @@ impl Command {
             index,
         })
     }
+
+    pub fn status(&mut self) -> Result<()> {
+        if !self.workspace.get_git_path().exists() {
+            return Err(anyhow!("not a git repository (or any parent up to mount point /)"))
+        }
+        if self.workspace.get_git_path().join("index").exists() {
+            self.index.load()?;
+        }
+        self.workspace.list_files()?.iter().filter(|f| {
+            !self.index.is_tracked(f.to_path_buf())
+        }).for_each(|e| {
+            println!("?? {}", e.to_str().unwrap().to_string())
+        });
+        Ok(())
+    }
     pub fn init(&self) -> Result<()> {
         let git_path = &self.workspace.get_git_path();
         for dir in ["objects", "refs"] {
@@ -89,8 +104,8 @@ impl Command {
                 println!(
                     "[{} {:?}] {:?}",
                     is_root,
-                    &commit.get_oid(),
-                    message.lines().next()
+                    util::encode_vec(&commit.get_oid()?),
+                    message.lines().next().unwrap()
                 );
                 Ok(())
             }

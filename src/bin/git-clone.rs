@@ -18,6 +18,9 @@ fn main() -> Result<()> {
             ),
         )
         .subcommand(
+            SubCommand::with_name("status").help("list untracked files")
+            )
+        .subcommand(
             App::new("commit")
                 .arg(
                     Arg::from_usage("-m --message=[MESSAGE] 'Add the commit message'")
@@ -36,6 +39,16 @@ fn main() -> Result<()> {
         )
         .get_matches();
     match matches.subcommand() {
+        ("status", Some(_)) => {
+            let root_path = current_dir();
+            match root_path {
+                Ok(root_path) => {
+                    let mut command = Command::new(root_path)?;
+                    command.status()
+                }
+                Err(e) => Err(anyhow!(e)),
+            }
+        }
         ("init", Some(_matches)) => {
             let root_path = _matches
                 .value_of("PATH")
