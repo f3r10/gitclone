@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+use std::path::Path;
 use std::{fs, path::PathBuf};
 
 use anyhow::anyhow;
@@ -17,6 +19,51 @@ pub struct Command {
     pub index: Index,
 }
 
+pub struct Status {
+    untracked: BTreeSet<String>
+}
+
+impl Status {
+    pub fn new() -> Self {
+        Status {
+            untracked: BTreeSet::new()
+        }
+    }
+    pub fn run(&mut self, cmd: &mut Command) -> Result<()> {
+        if !cmd.workspace.get_git_path().exists() {
+            return Err(anyhow!("not a git repository (or any parent up to mount point /)"))
+        }
+        if cmd.workspace.get_git_path().join("index").exists() {
+            cmd.index.load()?;
+        }
+        self.scan_workspace(None, cmd)?;
+        self.untracked.iter().for_each(|e| {
+            println!("?? {}", e)
+        });
+        Ok(())
+
+    }
+
+    pub fn scan_workspace(&mut self, prefix: Option<PathBuf> , cmd: &mut Command) -> Result<()> {
+        let prefix = prefix.unwrap_or(Path::new("").to_path_buf());
+        for (key, value) in cmd.workspace.list_dir(prefix)?.iter() {
+            if cmd.index.is_tracked(key.to_path_buf()) {
+                if value.is_dir() {
+                    self.scan_workspace(Some(key.to_path_buf()), cmd)?;
+                }
+            } else {
+                let final_name = if value.is_dir() {
+                    format!("{}/", key.to_str().unwrap().to_string())
+                } else {
+                    key.to_str().unwrap().to_string()
+                };
+                self.untracked.insert(final_name);
+            }
+        };
+        Ok(())
+    }
+}
+
 impl Command {
     pub fn new(path_buf: PathBuf) -> Result<Self> {
         let ws = Workspace::new(&path_buf);
@@ -30,18 +77,8 @@ impl Command {
     }
 
     pub fn status(&mut self) -> Result<()> {
-        if !self.workspace.get_git_path().exists() {
-            return Err(anyhow!("not a git repository (or any parent up to mount point /)"))
-        }
-        if self.workspace.get_git_path().join("index").exists() {
-            self.index.load()?;
-        }
-        self.workspace.list_files()?.iter().filter(|f| {
-            !self.index.is_tracked(f.to_path_buf())
-        }).for_each(|e| {
-            println!("?? {}", e.to_str().unwrap().to_string())
-        });
-        Ok(())
+        let mut status = Status::new();
+        status.run(self)
     }
     pub fn init(&self) -> Result<()> {
         let git_path = &self.workspace.get_git_path();

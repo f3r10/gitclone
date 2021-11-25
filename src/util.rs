@@ -127,7 +127,7 @@ pub fn read_file(path: PathBuf) -> Result<Vec<u8>> {
     Ok(res)
 }
 
-pub fn stat_file(path: PathBuf) -> Result<Metadata> {
+pub fn stat_file(path: &PathBuf) -> Result<Metadata> {
     let msg = format!("stat ('{:?}'): Permission denied", &path);
     let metadata = fs::metadata(path).map_err(|_| anyhow!(msg))?;
     Ok(metadata)
@@ -223,7 +223,7 @@ pub fn write_file (root_path: &PathBuf, paths: Vec<PathBuf>) -> Result<Vec<PathB
             Some(parent) if parent.file_name().is_some() => {
                 let path = root_path.join(parent);
                 fs::create_dir_all(&path)?;
-                File::create(&p)?;
+                File::create(&(root_path.join(p)))?;
                 final_paths.push(Path::new(p).to_path_buf());
             },
             None | Some(_) => {

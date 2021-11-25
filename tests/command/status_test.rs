@@ -10,7 +10,7 @@ use tempfile::TempDir;
 #[test]
 fn list_untracked_files_in_name_order() {
     let temp_dir = TempDir::new().expect("unable to create a temporary working directory");
-    assert!(env::set_current_dir(&temp_dir).is_ok());
+    // assert!(env::set_current_dir(&temp_dir).is_ok());
     let _paths =
         util::write_file(&temp_dir.path().to_owned(), vec![Path::new("file.txt").to_path_buf(), Path::new("another.txt").to_path_buf()]).unwrap();
     process::Command::cargo_bin("git-clone")
@@ -37,7 +37,7 @@ fn list_untracked_files_in_name_order() {
 #[test]
 fn list_files_as_untracked_if_they_are_not_in_index() {
     let temp_dir = TempDir::new().expect("unable to create a temporary working directory");
-    assert!(env::set_current_dir(&temp_dir).is_ok());
+    // assert!(env::set_current_dir(&temp_dir).is_ok());
     let _paths =
         util::write_file(&temp_dir.path().to_owned(), vec![Path::new("commited.txt").to_path_buf()]).unwrap();
     process::Command::cargo_bin("git-clone")
@@ -71,4 +71,55 @@ fn list_files_as_untracked_if_they_are_not_in_index() {
         .assert()
         .success()
         .stdout(is_match("^(\\?\\?) (file.txt\\n)$").unwrap().normalize());
+}
+
+#[test]
+fn list_untracked_directories_not_their_contents() {
+    let temp_dir = TempDir::new().expect("unable to create a temporary working directory");
+    let _paths =
+        util::write_file(&temp_dir.path().to_owned(), vec![Path::new("file.txt").to_path_buf(), Path::new("dir").join("another.txt")]).unwrap();
+    process::Command::cargo_bin("git-clone")
+        .unwrap()
+        .args(&["init"])
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(contains("Initialized empty Jit repository in"));
+    process::Command::cargo_bin("git-clone")
+        .unwrap()
+        .args(&["status"])
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(is_match("^(\\?\\? dir/\n\\?\\? file.txt\\n)$").unwrap());
+}
+
+#[test]
+fn list_untracked_files_inside_tracked_directories() {
+    let temp_dir = TempDir::new().expect("unable to create a temporary working directory");
+    let _paths =
+        util::write_file(&temp_dir.path().to_owned(), vec![Path::new("a/b/").join("inner.txt")]).unwrap();
+    process::Command::cargo_bin("git-clone")
+        .unwrap()
+        .args(&["init"])
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(contains("Initialized empty Jit repository in"));
+    process::Command::cargo_bin("git-clone")
+        .unwrap()
+        .args(&["add", "."])
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(is_empty());
+    let _paths =
+        util::write_file(&temp_dir.path().to_owned(), vec![Path::new("a/").join("outer.txt"), Path::new("a/b/c/").join("file.txt")]).unwrap();
+    process::Command::cargo_bin("git-clone")
+        .unwrap()
+        .args(&["status"])
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(is_match("^(\\?\\? a/b/c/\n\\?\\? a/outer.txt\\n)$").unwrap());
 }

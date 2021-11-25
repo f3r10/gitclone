@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+use std::fs;
+use std::fs::Metadata;
+use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::anyhow;
@@ -9,7 +13,7 @@ use crate::{
 };
 
 pub struct Workspace {
-    pathname: PathBuf,
+    pub pathname: PathBuf,
 }
 
 impl Workspace {
@@ -24,6 +28,31 @@ impl Workspace {
             e.strip_prefix(&self.pathname).unwrap().to_path_buf()
         }).collect::<Vec<_>>();
         Ok(res)
+    }
+
+    pub fn list_dir<P: AsRef<Path>>(&self, dirname: P) -> Result<HashMap<PathBuf, Metadata>> {
+        let path = &self.pathname.join(dirname);
+        let mut stats: HashMap<PathBuf, Metadata> = HashMap::new();
+        fs::read_dir(path)?
+            .into_iter()
+            .filter(|e| match e {
+                Ok(p) => p.file_name() != ".git",
+                Err(_e) => true,
+            })
+        //flat_map
+        .for_each(|er| {
+            er.map(|e| {
+                let inner_path = e.path();
+                let cmp = path.join(inner_path.to_path_buf());
+                let relative = cmp.strip_prefix(&self.pathname).unwrap();
+                stats.insert(
+                    relative.to_path_buf(), 
+                    util::stat_file(&inner_path).unwrap()
+                    )
+            }).unwrap();
+        });
+        // .collect::<Vec<_>>();
+        Ok(stats)
     }
 
     pub fn create_tree_from_paths(&self, paths: Vec<PathBuf>) -> Result<TreeAux> {
@@ -85,7 +114,7 @@ impl Workspace {
         for entry in &tree.entries {
             match entry {
                 EntryWrapper::Entry { entry: e, name: _ } => {
-                    let stat = util::stat_file(e.path.canonicalize()?)?;
+                    let stat = util::stat_file(&e.path.canonicalize()?)?;
                     match &e.oid {
                         Some(oid) => {
                             index.add(e.path.to_path_buf(), oid.to_vec(), stat)?;

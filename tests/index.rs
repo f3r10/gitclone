@@ -19,7 +19,7 @@ fn add_a_single_file() -> Result<()> {
     let rng = SystemRandom::new();
     let mut oid = [0u8; digest::SHA1_OUTPUT_LEN];
     rng.fill(&mut oid).unwrap();
-    let stat = util::stat_file(file_to_add.to_path_buf())?;
+    let stat = util::stat_file(&file_to_add.to_path_buf())?;
     let mut index = Index::new(&index_file);
     index.add(file_to_add.to_path_buf(), oid.to_vec(), stat)?;
     let entries = index
@@ -49,9 +49,9 @@ fn replace_a_file_with_directory() -> Result<()> {
     let mut oid = [0u8; digest::SHA1_OUTPUT_LEN];
     rng.fill(&mut oid).unwrap();
 
-    let stat_1 = util::stat_file(file_to_add_1.to_path_buf())?;
-    let stat_2 = util::stat_file(file_to_add_2.to_path_buf())?;
-    let stat_3 = util::stat_file(dir.to_path_buf())?;
+    let stat_1 = util::stat_file(&file_to_add_1.to_path_buf())?;
+    let stat_2 = util::stat_file(&file_to_add_2.to_path_buf())?;
+    let stat_3 = util::stat_file(&dir.to_path_buf())?;
 
     let mut index = Index::new(&index_file);
     index.add(file_to_add_1.to_path_buf(), oid.to_vec(), stat_1)?;
@@ -85,9 +85,9 @@ fn replace_dir_with_file() -> Result<()> {
     let mut oid = [0u8; digest::SHA1_OUTPUT_LEN];
     rng.fill(&mut oid).unwrap();
 
-    let stat_1 = util::stat_file(file_to_add_1.to_path_buf())?;
-    let stat_2 = util::stat_file(file_to_add_2.to_path_buf())?;
-    let stat_3 = util::stat_file(dir.to_path_buf())?;
+    let stat_1 = util::stat_file(&file_to_add_1.to_path_buf())?;
+    let stat_2 = util::stat_file(&file_to_add_2.to_path_buf())?;
+    let stat_3 = util::stat_file(&dir.to_path_buf())?;
 
     let mut index = Index::new(&index_file);
     index.add(file_to_add_1.to_path_buf(), oid.to_vec(), stat_1)?;
@@ -123,10 +123,10 @@ fn replace_recursively_dir_with_file() -> Result<()> {
     let mut oid = [0u8; digest::SHA1_OUTPUT_LEN];
     rng.fill(&mut oid).unwrap();
 
-    let stat_1 = util::stat_file(file_to_add_1.to_path_buf())?;
-    let stat_2 = util::stat_file(file_to_add_2.to_path_buf())?;
-    let stat_3 = util::stat_file(file_to_add_3.to_path_buf())?;
-    let stat_4 = util::stat_file(dir.to_path_buf())?;
+    let stat_1 = util::stat_file(&file_to_add_1.to_path_buf())?;
+    let stat_2 = util::stat_file(&file_to_add_2.to_path_buf())?;
+    let stat_3 = util::stat_file(&file_to_add_3.to_path_buf())?;
+    let stat_4 = util::stat_file(&dir.to_path_buf())?;
 
     let mut index = Index::new(&index_file);
     index.add(file_to_add_1.to_path_buf(), oid.to_vec(), stat_1)?;

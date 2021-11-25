@@ -292,7 +292,12 @@ impl Index {
     }
 
     pub fn is_tracked(&self, path: PathBuf) -> bool {
-        self.entries.contains_key(&path.to_str().unwrap().to_string())
+        // this checks for filename or dirs
+        // self.entries.contains_key(&path.to_str().unwrap().to_string())
+        // TODO this is not much performance if the list of elements of the workspace is huge. It
+        // is neccesary to create an aux data structure to save parent directories.  
+        let entry_name = path.to_str().unwrap();
+        self.entries.iter().any(|(key, _)| key.contains(entry_name))
     }
 }
 
