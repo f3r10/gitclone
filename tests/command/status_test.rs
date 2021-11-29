@@ -248,5 +248,5 @@ fn reports_files_with_modified_contents() {
         .current_dir(&temp_dir)
         .assert()
         .success()
-        .stdout(is_empty());
+        .stdout(is_match("^( M 1.txt\\n M a/2.txt\\n)$").unwrap());
 }

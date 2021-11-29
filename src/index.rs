@@ -42,6 +42,11 @@ const ENTRY_BLOCK: usize = 8;
 const MAX_PATH_SIZE: u16 = 0xfff;
 
 impl EntryAdd {
+
+    pub fn is_stat_match(&self, stat: &Metadata) -> bool {
+        self.size == (stat.size() as u32) || self.size == 0
+
+    }
     pub fn get_name(&self) -> String {
         let path = self.path.to_path_buf();
         path.display().to_string()

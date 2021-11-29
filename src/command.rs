@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fs::{DirEntry, Metadata};
 use std::path::Path;
 use std::{fs, path::PathBuf};
@@ -7,7 +7,7 @@ use anyhow::anyhow;
 use anyhow::Result;
 use chrono::Local;
 
-use crate::util;
+use crate::{EntryAdd, util};
 use crate::Author;
 use crate::Commit;
 use crate::Object;
@@ -21,13 +21,17 @@ pub struct Command {
 }
 
 pub struct Status {
-    untracked: BTreeSet<String>
+    stat: HashMap<String, Metadata>,
+    untracked: BTreeSet<String>,
+    changed: BTreeSet<String>
 }
 
 impl Status {
     pub fn new() -> Self {
         Status {
-            untracked: BTreeSet::new()
+            stat: HashMap::new(),
+            untracked: BTreeSet::new(),
+            changed: BTreeSet::new()
         }
     }
     pub fn run(&mut self, cmd: &mut Command) -> Result<()> {
@@ -38,6 +42,10 @@ impl Status {
             cmd.index.load()?;
         }
         self.scan_workspace(None, cmd)?;
+        self.detect_workspace_changes(cmd)?;
+        self.changed.iter().for_each(|e| {
+            println!(" M {}", e)
+        });
         self.untracked.iter().for_each(|e| {
             println!("?? {}", e)
         });
@@ -55,6 +63,9 @@ impl Status {
             if cmd.index.is_tracked(key.to_path_buf()) {
                 if value.is_dir() {
                     self.scan_workspace(Some(key.to_path_buf()), cmd)?;
+                }
+                if value.is_file() {
+                    self.stat.insert(key.display().to_string(), value.clone());
                 }
             } else {
                 if self.any_trackable_file(key.to_path_buf(), value, cmd)? {
@@ -98,6 +109,26 @@ impl Status {
         });
 
         Ok(res)
+    }
+
+    pub fn detect_workspace_changes(&mut self, cmd: &mut Command) -> Result<()> {
+        for entry in &cmd.index.each_entry()? {
+            self.check_index_entry(entry)?;
+        }
+        Ok(())
+    }
+
+    fn check_index_entry(&mut self, entry: &EntryAdd) -> Result<()> {
+        let stat = self.stat.get(&entry.get_path());
+        match stat {
+            Some(stat) => {
+                if !entry.is_stat_match(stat) {
+                    self.changed.insert(entry.get_path());
+                }
+                Ok(())
+            },
+            None => Ok(()),
+        }
     }
 }
 
