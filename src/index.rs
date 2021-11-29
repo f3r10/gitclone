@@ -44,12 +44,12 @@ const MAX_PATH_SIZE: u16 = 0xfff;
 impl EntryAdd {
     pub fn get_name(&self) -> String {
         let path = self.path.to_path_buf();
-        path.file_name().unwrap().to_str().unwrap().to_string()
+        path.display().to_string()
     }
 
     pub fn get_path(&self) -> String {
         let path = self.path.to_path_buf();
-        path.to_str().unwrap().to_string()
+        path.display().to_string()
     }
     pub fn get_mode(&self) -> Result<u32> {
         let mode = self.mode;
@@ -65,9 +65,9 @@ impl EntryAdd {
             &self
                 .path
                 .file_name()
-                .unwrap()
+                .expect("unable to get filename ref")
                 .to_str()
-                .unwrap()
+                .expect("unable to get an &str ref from and &OsStr ref")
                 .to_string()
                 .as_bytes(),
         );
@@ -90,7 +90,7 @@ impl EntryAdd {
         data.extend_from_slice(&self.size.to_be_bytes());
         data.extend_from_slice(&self.oid);
         data.extend_from_slice(&self.flags.to_be_bytes());
-        data.extend_from_slice(&self.path.to_str().unwrap().to_string().as_bytes());
+        data.extend_from_slice(&self.path.to_str().expect("unable to get str ref").to_string().as_bytes());
         data.push(0x00);
         while data.len() % ENTRY_BLOCK != 0 {
             data.push(0x00);
@@ -99,7 +99,7 @@ impl EntryAdd {
     }
 
     fn create(pathname: PathBuf, oid: Vec<u8>, stat: Metadata) -> Result<Self> {
-        let path = pathname.to_str().unwrap();
+        let path = pathname.to_str().expect("unable to get str ref");
         let mode =  util::get_mode(pathname.to_path_buf())?;
         let flags = std::cmp::min(path.bytes().len() as u16, MAX_PATH_SIZE);
         let entry = EntryAdd {
@@ -121,7 +121,7 @@ impl EntryAdd {
     }
 
     pub fn key(&self) -> String {
-        self.path.to_str().unwrap().to_string()
+        self.path.to_str().expect("unable to get str ref").to_string()
     }
 
     fn parse(entry: Vec<u8>) -> Result<EntryAdd> {
@@ -232,7 +232,6 @@ impl Index {
     }
 
     pub fn add(&mut self, pathname: PathBuf, oid: Vec<u8>, stat: Metadata) -> Result<()> {
-        // let path = pathname.to_str().unwrap();
         let entry = EntryAdd::create(pathname.clone(), oid, stat)?;
         self.discard_conflicts(&entry)?;
         self.store_entry(entry)?;
@@ -260,9 +259,9 @@ impl Index {
 
     pub fn each_entry(&self) -> Result<Vec<&EntryAdd>> {
         let mut entries: Vec<&EntryAdd> = Vec::new();
-        self.keys
-            .iter()
-            .for_each(|k| entries.push(self.entries.get(k).unwrap()));
+        for k in self.keys.iter() {
+            entries.push(self.entries.get(k).ok_or(anyhow!("unable to find EntryAdd"))?);
+        };
         Ok(entries)
     }
 
@@ -275,7 +274,7 @@ impl Index {
         data.extend_from_slice(&len.to_be_bytes());
         let entries = self.each_entry()?;
         for v in entries {
-            data.extend_from_slice(&v.get_data().unwrap());
+            data.extend_from_slice(&v.get_data()?);
         }
         let oid = util::hexdigest_vec(&data);
         let mut data_to_write = data;
@@ -296,7 +295,8 @@ impl Index {
         // self.entries.contains_key(&path.to_str().unwrap().to_string())
         // TODO this is not much performance if the list of elements of the workspace is huge. It
         // is neccesary to create an aux data structure to save parent directories.  
-        let entry_name = path.to_str().unwrap();
+        // any is a short-circuting function therefore will stop when the closure returns a true.
+        let entry_name = path.to_str().expect("Unable to get &str reference from Path");
         self.entries.iter().any(|(key, _)| key.contains(entry_name))
     }
 }

@@ -3,12 +3,12 @@ use anyhow::anyhow;
 use data_encoding::HEXLOWER;
 use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY};
 use std::fs::File;
+use std::io::Write;
 use std::os::unix::prelude::PermissionsExt;
 use std::{
     collections::HashMap,
     env::current_dir,
     fs::{self, Metadata},
-    io,
     path::{Path, PathBuf},
 };
 
@@ -41,14 +41,14 @@ impl TreeAux {
             tree: TreeAux::new(),
         };
         if !ancestors.is_empty() {
-            let first = ancestors.first().unwrap();
+            let first = ancestors.first().ok_or(anyhow!("unable to get first ancestor"))?;
             let mut comps = first.components();
-            let comp = comps.next_back().unwrap();
+            let comp = comps.next_back().ok_or(anyhow!("unable to get last component of path"))?;
             let comp: &Path = comp.as_ref();
             if !self.entries.contains_key(comp) {
                 self.entries.insert(comp.to_path_buf(), tea);
             }
-            let e: &mut TreeEntryAux = self.entries.get_mut(comp).unwrap();
+            let e: &mut TreeEntryAux = self.entries.get_mut(comp).ok_or(anyhow!("unable to get mut component from HasMap"))?;
             match e {
                 TreeEntryAux::TreeLeafAux { entry: _entry } => {}
                 TreeEntryAux::TreeBranchAux { tree } => {
@@ -59,7 +59,7 @@ impl TreeAux {
             }
         } else {
             let mut comps = root_path.components();
-            let comp = comps.next_back().unwrap();
+            let comp = comps.next_back().ok_or(anyhow!("unable to get last component of path"))?;
             let comp: &Path = comp.as_ref();
             let e = Entry::new(&root_path, oid_o)?;
             let leaf = TreeEntryAux::TreeLeafAux { entry: e };
@@ -175,12 +175,13 @@ pub fn flatten_dot(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
                         Ok(p) => p.file_name() != ".git",
                         Err(_e) => true,
                     })
-                    // since all the path are taken from the current dir the strip_prefix will not
-                    // fail
                     .map(|res| {
-                        res.map(|e| e.path().strip_prefix(&current_dir).unwrap().to_path_buf())
+                        let e = res?;
+                        let path = e.path();
+                        let stripped = path.strip_prefix(&current_dir)?;
+                        Ok(stripped.to_path_buf())
                     })
-                    .collect::<Result<Vec<_>, io::Error>>()
+                    .collect::<Result<Vec<_>, anyhow::Error>>()
             } else {
                 Ok(vec![e.to_path_buf()])
             }
@@ -216,19 +217,19 @@ pub fn list_files(path: &PathBuf) -> Result<Vec<PathBuf>> {
     Ok(res)
 }
 
-pub fn write_file (root_path: &PathBuf, paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
+pub fn write_file (root_path: &PathBuf, paths: Vec<(PathBuf, &[u8])>) -> Result<Vec<PathBuf>> {
     let mut final_paths = Vec::new();
-    for p in paths.iter() {
+    for (p, buf) in paths.iter() {
         match p.parent() {
             Some(parent) if parent.file_name().is_some() => {
                 let path = root_path.join(parent);
                 fs::create_dir_all(&path)?;
-                File::create(&(root_path.join(p)))?;
+                File::create(&(root_path.join(p)))?.write_all(buf)?;
                 final_paths.push(Path::new(p).to_path_buf());
             },
             None | Some(_) => {
                 let path = root_path.join(p);
-                File::create(&path)?;
+                File::create(&path)?.write_all(buf)?;
                 final_paths.push(Path::new(p).to_path_buf());
             },
         }

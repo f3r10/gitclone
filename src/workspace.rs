@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
+use std::fs::DirEntry;
 use std::fs::Metadata;
 use std::path::Path;
 use std::path::PathBuf;
@@ -24,34 +25,32 @@ impl Workspace {
     }
 
     pub fn list_files(&self) -> Result<Vec<PathBuf>> {
-        let res = util::list_files(&self.pathname)?.iter().map(|e| {
-            e.strip_prefix(&self.pathname).unwrap().to_path_buf()
-        }).collect::<Vec<_>>();
-        Ok(res)
+        util::list_files(&self.pathname)?.into_iter().map(|p| {
+            p.strip_prefix(&self.pathname).map(|p| p.to_path_buf()).map_err(|e| e.into())
+        }).collect::<Result<Vec<_>, _>>()
     }
 
-    pub fn list_dir<P: AsRef<Path>>(&self, dirname: P) -> Result<HashMap<PathBuf, Metadata>> {
+    pub fn list_dir<P, F>(&self, dirname: P, filter: F) -> Result<HashMap<PathBuf, Metadata>> 
+        where 
+            P: AsRef<Path>, 
+            F: FnMut(&Result<DirEntry, std::io::Error>) -> bool,
+        {
         let path = &self.pathname.join(dirname);
         let mut stats: HashMap<PathBuf, Metadata> = HashMap::new();
-        fs::read_dir(path)?
+        let filter_entries = fs::read_dir(path)?
             .into_iter()
-            .filter(|e| match e {
-                Ok(p) => p.file_name() != ".git",
-                Err(_e) => true,
-            })
-        //flat_map
-        .for_each(|er| {
-            er.map(|e| {
-                let inner_path = e.path();
-                let cmp = path.join(inner_path.to_path_buf());
-                let relative = cmp.strip_prefix(&self.pathname).unwrap();
-                stats.insert(
-                    relative.to_path_buf(), 
-                    util::stat_file(&inner_path).unwrap()
-                    )
-            }).unwrap();
-        });
-        // .collect::<Vec<_>>();
+            .filter(filter);
+
+        for er in filter_entries {
+            let e = er?;
+            let inner_path = e.path();
+            let cmp = path.join(inner_path.to_path_buf());
+            let relative = cmp.strip_prefix(&self.pathname)?;
+            stats.insert(
+                relative.to_path_buf(), 
+                util::stat_file(&inner_path)?
+            );
+        };
         Ok(stats)
     }
 
