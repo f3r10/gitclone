@@ -11,7 +11,7 @@ fn commit_test() {
     let temp_dir = TempDir::new().expect("unable to create a temporary working directory");
     assert!(env::set_current_dir(&temp_dir).is_ok());
     let _paths =
-        util::write_file(&temp_dir.path().to_owned(), vec![Path::new("file.txt").to_path_buf(), Path::new("another.txt").to_path_buf()]).unwrap();
+        util::write_file(&temp_dir.path().to_owned(), vec![(Path::new("file.txt").to_path_buf(), "hello".as_bytes()), (Path::new("another.txt").to_path_buf(), "world".as_bytes())]).unwrap();
     process::Command::cargo_bin("git-clone")
         .unwrap()
         .args(&["init"])

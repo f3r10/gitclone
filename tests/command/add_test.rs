@@ -25,7 +25,7 @@ fn cli_add() {
     let temp_dir = TempDir::new().expect("unable to create a temporary working directory");
     assert!(env::set_current_dir(&temp_dir).is_ok());
     let _paths =
-        util::write_file(&temp_dir.path().to_owned(), vec![Path::new("hello.txt").to_path_buf(), Path::new("hello").to_path_buf()]).unwrap();
+        util::write_file(&temp_dir.path().to_owned(), vec![(Path::new("hello.txt").to_path_buf(), "hello".as_bytes())]).unwrap();
     process::Command::cargo_bin("git-clone")
         .unwrap()
         .args(&["init"])
@@ -68,7 +68,7 @@ fn cli_add_multiple_files_to_the_index() {
     let temp_dir = TempDir::new().expect("unable to create a temporary working directory");
     assert!(env::set_current_dir(&temp_dir).is_ok());
     let _paths =
-        util::write_file(&temp_dir.path().to_owned(), vec![Path::new("hello.txt").to_path_buf(), Path::new("hello").to_path_buf(), Path::new("world.txt").to_path_buf(), Path::new("world").to_path_buf()]).unwrap();
+        util::write_file(&temp_dir.path().to_owned(), vec![(Path::new("hello.txt").to_path_buf(), "hello".as_bytes()), (Path::new("world.txt").to_path_buf(), "world".as_bytes())]).unwrap();
     process::Command::cargo_bin("git-clone")
         .unwrap()
         .args(&["init"])
@@ -101,7 +101,7 @@ fn cli_incrementally_adds_files_to_the_index() {
     let temp_dir = TempDir::new().expect("unable to create a temporary working directory");
     assert!(env::set_current_dir(&temp_dir).is_ok());
     let _paths =
-        util::write_file(&temp_dir.path().to_owned(), vec![Path::new("hello.txt").to_path_buf(), Path::new("hello").to_path_buf(), Path::new("world.txt").to_path_buf(), Path::new("world").to_path_buf()]).unwrap();
+        util::write_file(&temp_dir.path().to_owned(), vec![(Path::new("hello.txt").to_path_buf(), "hello".as_bytes()), (Path::new("world.txt").to_path_buf(), "world".as_bytes())]).unwrap();
     process::Command::cargo_bin("git-clone")
         .unwrap()
         .args(&["init"])
@@ -143,7 +143,7 @@ fn cli_adds_a_directory_to_the_index() {
     let temp_dir = TempDir::new().expect("unable to create a temporary working directory");
     assert!(env::set_current_dir(&temp_dir).is_ok());
     let _paths =
-        util::write_file(&temp_dir.path().to_owned(), vec![Path::new("a-dir").join("nested.txt"), Path::new("content").to_path_buf()]).unwrap();
+        util::write_file(&temp_dir.path().to_owned(), vec![(Path::new("a-dir").join("nested.txt"), "content".as_bytes())]).unwrap();
     process::Command::cargo_bin("git-clone")
         .unwrap()
         .args(&["init"])
@@ -176,7 +176,7 @@ fn cli_adds_the_repository_root_to_the_index() {
     let temp_dir = TempDir::new().expect("unable to create a temporary working directory");
     assert!(env::set_current_dir(&temp_dir).is_ok());
     let _paths =
-        util::write_file(&temp_dir.path().to_owned(), vec![Path::new("a/b/c/").join("file.txt")]).unwrap();
+        util::write_file(&temp_dir.path().to_owned(), vec![(Path::new("a/b/c/").join("file.txt"), "".as_bytes())]).unwrap();
     process::Command::cargo_bin("git-clone")
         .unwrap()
         .args(&["init"])
@@ -209,7 +209,7 @@ fn adds_regular_file_to_index() {
     let temp_dir = tempdir().unwrap();
     assert!(env::set_current_dir(&temp_dir).is_ok());
     let paths =
-        util::write_file(&temp_dir.path().to_owned(), vec![Path::new("hello.txt").to_path_buf(), Path::new("hello").to_path_buf()]).unwrap();
+        util::write_file(&temp_dir.path().to_owned(), vec![(Path::new("hello.txt").to_path_buf(), "hello".as_bytes())]).unwrap();
     let mut command = Command::new(temp_dir.path().to_path_buf()).unwrap();
     command.init().unwrap();
     command.add(paths[..1].to_vec()).unwrap();
@@ -227,13 +227,10 @@ fn adds_regular_file_to_index() {
 #[test]
 fn adds_an_executable_file_to_index() {
     let temp_dir = TempDir::new().unwrap();
-    println!("temp_dir: {:?}", temp_dir);
     assert!(env::set_current_dir(&temp_dir).is_ok());
-    println!("current dir 1 {:?}", current_dir());
     let temp_path = temp_dir.path().to_owned();
     let paths =
-        util::write_file(&temp_dir.path().to_owned(), vec![Path::new("hello.txt").to_path_buf(), Path::new("hello").to_path_buf()]).unwrap();
-    println!("current dir 2 {:?}", current_dir());
+        util::write_file(&temp_dir.path().to_owned(), vec![(Path::new("hello.txt").to_path_buf(), "hello".as_bytes())]).unwrap();
     let perms = Permissions::from_mode(0o100755);
     fs::set_permissions(paths[0].to_path_buf(), perms).unwrap();
     let mut command = Command::new(temp_path).unwrap();
