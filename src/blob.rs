@@ -22,14 +22,7 @@ impl Object for Blob {
     }
 
     fn get_oid(&mut self) -> Result<Vec<u8>> {
-        match &self.oid {
-            Some(oid) => Ok(oid.to_vec()),
-            None => {
-                let digest = util::hexdigest_vec(&self.get_data_to_write()?);
-                self.set_oid(&digest);
-                Ok(digest)
-            }
-        }
+        self.get_oid()
     }
 }
 
@@ -57,6 +50,17 @@ impl Blob {
         let mut data_to_write = data_to_write.into_bytes();
         data_to_write.append(&mut file_data);
         Ok(data_to_write)
+    }
+    
+    pub fn get_oid(&mut self) -> Result<Vec<u8>> {
+        match &self.oid {
+            Some(oid) => Ok(oid.to_vec()),
+            None => {
+                let digest = util::hexdigest_vec(&self.get_data_to_write()?);
+                self.set_oid(&digest);
+                Ok(digest)
+            }
+        }
     }
 
     fn set_oid(&mut self, oid: &Vec<u8>) -> () {

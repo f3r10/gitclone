@@ -7,7 +7,7 @@ use anyhow::anyhow;
 use anyhow::Result;
 use chrono::Local;
 
-use crate::{EntryAdd, util};
+use crate::{Blob, EntryAdd, util};
 use crate::Author;
 use crate::Commit;
 use crate::Object;
@@ -123,6 +123,15 @@ impl Status {
         match stat {
             Some(stat) => {
                 if !entry.is_stat_match(stat) {
+                    self.changed.insert(entry.get_path());
+                    // if it is possible to detect a difference with stat then is not necessary to read
+                    // the file
+                    return Ok(())
+                }
+
+                let mut blob = Blob::new(entry.path.to_path_buf())?;
+
+                if !(entry.oid == blob.get_oid()?) {
                     self.changed.insert(entry.get_path());
                 }
                 Ok(())

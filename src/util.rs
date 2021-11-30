@@ -150,6 +150,16 @@ pub fn get_mode(path_buf: PathBuf) -> Result<u32> {
     }
 }
 
+pub fn get_mode_stat(stat: &Metadata) -> u32 {
+    let unix_mode = stat.permissions().mode();
+    let is_executable = (unix_mode & 0o001) != 0;
+    if is_executable {
+        EXECUTABLE_MODE
+    } else {
+        REGULAR_MODE
+    }
+}
+
 pub fn encode_vec(data: &Vec<u8>) -> String {
     HEXLOWER.encode(data)
 }

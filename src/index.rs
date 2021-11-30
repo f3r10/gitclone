@@ -44,8 +44,8 @@ const MAX_PATH_SIZE: u16 = 0xfff;
 impl EntryAdd {
 
     pub fn is_stat_match(&self, stat: &Metadata) -> bool {
+        (self.mode == util::get_mode_stat(stat)) &&
         self.size == (stat.size() as u32) || self.size == 0
-
     }
     pub fn get_name(&self) -> String {
         let path = self.path.to_path_buf();
