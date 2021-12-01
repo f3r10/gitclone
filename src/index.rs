@@ -302,27 +302,29 @@ impl Index {
     }
 
     pub fn write_updates(&self) -> Result<()> {
-        let mut data = Vec::new();
-        let mode: i32 = 2;
-        let len: i32 = *&self.entries.len() as i32;
-        data.extend_from_slice("DIRC".as_bytes());
-        data.extend_from_slice(&mode.to_be_bytes());
-        data.extend_from_slice(&len.to_be_bytes());
-        let entries = self.each_entry()?;
-        for v in entries {
-            data.extend_from_slice(&v.get_data()?);
+        if self.changed {
+            let mut data = Vec::new();
+            let mode: i32 = 2;
+            let len: i32 = *&self.entries.len() as i32;
+            data.extend_from_slice("DIRC".as_bytes());
+            data.extend_from_slice(&mode.to_be_bytes());
+            data.extend_from_slice(&len.to_be_bytes());
+            let entries = self.each_entry()?;
+            for v in entries {
+                data.extend_from_slice(&v.get_data()?);
+            }
+            let oid = util::hexdigest_vec(&data);
+            let mut data_to_write = data;
+            data_to_write.extend_from_slice(&oid);
+
+            let mut file = OpenOptions::new()
+                .read(true)
+                .create(true)
+                .write(true)
+                .open(&self.pathname)?;
+
+            file.write_all(&data_to_write)?;
         }
-        let oid = util::hexdigest_vec(&data);
-        let mut data_to_write = data;
-        data_to_write.extend_from_slice(&oid);
-
-        let mut file = OpenOptions::new()
-            .read(true)
-            .create(true)
-            .write(true)
-            .open(&self.pathname)?;
-
-        file.write_all(&data_to_write)?;
         Ok(())
     }
 
@@ -336,8 +338,7 @@ impl Index {
         self.entries.iter().any(|(key, _)| key.contains(entry_name))
     }
 
-    pub fn update_entry_stat(&mut self, entry: &mut EntryAdd, stat: &Metadata) -> () {
-        entry.update_entry_stat(stat);
+    pub fn update_changed_status(&mut self) -> () {
         self.changed = true;
     }
 }

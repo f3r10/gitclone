@@ -126,28 +126,44 @@ impl Status {
     pub fn detect_workspace_changes(&mut self) -> Result<()> {
         let cmd = self.cmd.clone();
         let borrow = &mut *cmd.borrow_mut();
-        let index = &borrow.index;
-        let mut entries = index.each_mut_entry()?;
-        while let Some(mut entry) = entries.pop() {
-            let stat = self.stat.get(&entry.get_path());
-            match stat {
-                Some(stat) => {
-                    if !entry.is_stat_match(stat) {
-                        self.changed.insert(entry.get_path());
-                        continue;
-                    }
+        let mut changed_index: bool = false;
+        {
+            let index = &borrow.index;
+            let mut entries = index.each_mut_entry()?;
+            while let Some(mut entry) = entries.pop() {
+                let stat = self.stat.get(&entry.get_path());
+                match stat {
+                    Some(stat) => {
+                        if !entry.is_stat_match(stat) {
+                            self.changed.insert(entry.get_path());
+                            continue;
+                        }
 
-                    let mut blob = Blob::new(entry.path.to_path_buf())?;
+                        // we want to avoid whatever is possible to read a file's content
+                        if entry.times_match(stat) {
+                            continue;
+                        }
 
-                    if entry.oid == blob.get_oid()? {
-                        entry.update_entry_stat(stat);
-                    } else {
-                        self.changed.insert(entry.get_path());
-                    }
-                },
-                None => (),
-            }
-        };
+                        let mut blob = Blob::new(entry.path.to_path_buf())?;
+
+                        // if the file has not changed despite the previous checks, it is necessary to
+                        // update index info for the next time.
+                        if entry.oid == blob.get_oid()? {
+                            // println!("touched file: {:?}", entry);
+                            entry.update_entry_stat(stat);
+                            changed_index = true;
+                        } else {
+                            self.changed.insert(entry.get_path());
+                        }
+                    },
+                    None => (),
+                }
+            };
+        }
+        if changed_index {
+            let index = &mut borrow.index;
+            index.update_changed_status();
+        }
         Ok(())
     }
 }
