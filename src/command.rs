@@ -59,55 +59,59 @@ impl Status {
                 Ok(p) => p.file_name() != ".git",
                 Err(_e) => true,
             };
-        for (key, value) in cmd.workspace.list_dir(prefix, e)?.iter() {
-            if cmd.index.is_tracked(key.to_path_buf()) {
-                if value.is_dir() {
-                    self.scan_workspace(Some(key.to_path_buf()), cmd)?;
-                }
-                if value.is_file() {
-                    self.stat.insert(key.display().to_string(), value.clone());
-                }
-            } else {
-                if self.any_trackable_file(key.to_path_buf(), value, cmd)? {
-                    let final_name = if value.is_dir() {
-                        format!("{}/", key.display())
-                    } else {
-                        key.display().to_string()
-                    };
-                    self.untracked.insert(final_name);
+        let mut work = vec![prefix];
+        while let Some(dir) = work.pop() {
+            for (key, value) in cmd.workspace.list_dir(dir, e)?.iter() {
+                if cmd.index.is_tracked(key.to_path_buf()) {
+                    if value.is_dir() {
+                        work.push(key.to_path_buf())
+                    }
+                    if value.is_file() {
+                        self.stat.insert(key.display().to_string(), value.clone());
+                    }
+                } else {
+                    if self.any_trackable_file(key.to_path_buf(), value, cmd)? {
+                        let final_name = if value.is_dir() {
+                            format!("{}/", key.display())
+                        } else {
+                            key.display().to_string()
+                        };
+                        self.untracked.insert(final_name);
+                    }
                 }
             }
-        };
+        }
         Ok(())
     }
 
     pub fn any_trackable_file(&self, path: PathBuf, stat: &Metadata, cmd: &mut Command) -> Result<bool> {
-        if stat.is_file() {
-            return Ok(!cmd.index.is_tracked(path.to_path_buf()))
-        }
-
-        if !stat.is_dir() {
-            return Ok(false)
-        }
-
         let e = |e: &Result<DirEntry, std::io::Error>| match e {
                 Ok(p) => p.file_name() != ".git",
                 Err(_e) => true,
             };
 
-        let items = cmd.workspace.list_dir(path.to_path_buf(), e)?;
-        let files = items.iter()
-            .filter(|(_, item_stat)| item_stat.is_file()).collect::<Vec<_>>();
-        let dirs = items.iter()
-            .filter(|(_, item_stat)| item_stat.is_dir()).collect::<Vec<_>>();
-
         // if there is any file that can be tracked the function should stop without needing to
         // check the rest files or directories -- not going further and checking possible
         // directories will make this function faster. 
-        let res = vec![files, dirs].iter().any(|list| {
-            list.iter().any(|(item_path, item_stat)| self.any_trackable_file(item_path.to_path_buf(), item_stat, cmd).unwrap())
-        });
+        let mut work = vec![(path.to_path_buf(), stat.to_owned())];
+        let mut res: bool = false;
+        while let Some((dir, stat)) = work.pop() {
+            if stat.is_file() {
+                res = !cmd.index.is_tracked(path.to_path_buf());
+                break;
+            }
 
+            if !stat.is_dir() {
+                res = false;
+                break;
+            } else {
+                let items = cmd.workspace.list_dir(dir.to_path_buf(), e)?;
+                let iter = items.into_iter();
+                let (files, dirs): (Vec<_>, Vec<_>) = iter.partition(|(_, item_stat)| item_stat.is_file());
+                work.extend(dirs);
+                work.extend(files);
+            }
+        }
         Ok(res)
     }
 

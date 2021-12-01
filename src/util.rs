@@ -205,25 +205,25 @@ pub fn flatten_dot(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
 
 
 pub fn list_files(path: &PathBuf) -> Result<Vec<PathBuf>> {
-    let res = fs::read_dir(path)?
-        .into_iter()
-        .filter(|e| match e {
-            Ok(p) => p.file_name() != ".git" && p.file_name() != "target",
-            Err(_e) => true,
-        })
-    .flat_map(|er| {
-        er.map(|e| {
-            let inner_path = e.path();
-            if inner_path.is_dir() {
-                list_files(&inner_path)
-            } else {
-                Ok(vec![inner_path])
+    let mut res = Vec::new();
+    let mut work = vec![path.to_path_buf()];
+    while let Some(dir) = work.pop() {
+        let filtered = fs::read_dir(dir)?
+            .into_iter()
+            .filter(|e| match e {
+                Ok(p) => p.file_name() != ".git" && p.file_name() != "target",
+                Err(_e) => true,
+            });
+        for entry in filtered {
+            let entry = entry?;
+            let file_type = entry.file_type()?;
+            if file_type.is_file() {
+                res.push(entry.path())
+            } else if file_type.is_dir() {
+                work.push(entry.path())
             }
-        })
-    })
-    .flatten()
-        .flatten()
-        .collect::<Vec<_>>();
+        }
+    }
     Ok(res)
 }
 
