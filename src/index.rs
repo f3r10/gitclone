@@ -1,5 +1,8 @@
 use anyhow::anyhow;
 use byteorder::{BigEndian, ReadBytesExt};
+use std::cell::Ref;
+use std::cell::RefCell;
+use std::cell::RefMut;
 use std::char;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -16,7 +19,7 @@ use crate::Checksum;
 
 pub struct Index {
     pathname: PathBuf,
-    entries: HashMap<String, EntryAdd>,
+    entries: HashMap<String, RefCell<EntryAdd>>,
     keys: BTreeSet<String>,
     changed: bool,
 }
@@ -43,6 +46,24 @@ const MAX_PATH_SIZE: u16 = 0xfff;
 
 impl EntryAdd {
 
+
+    pub fn update_entry_stat(&mut self, stat: &Metadata) -> () {
+        self.ctime =  stat.ctime() as u32;
+        self.ctime_nsec =  stat.ctime_nsec() as u32;
+        self.mtime =  stat.mtime() as u32;
+        self.mtime_nsec = stat.mtime_nsec() as u32;
+        self.dev = stat.dev() as u32;
+        self.ino = stat.ino() as u32;
+        self.mode = util::get_mode_stat(stat);
+        self.uid =  stat.uid() as u32;
+        self.gid = stat.gid() as u32;
+        self.size = stat.size() as u32;
+    }
+
+    pub fn times_match(&self, stat: &Metadata) -> bool {
+        self.ctime == (stat.ctime() as u32) && self.ctime_nsec == (stat.ctime_nsec() as u32) &&
+            self.mtime == (stat.mtime() as u32) && self.mtime_nsec == (stat.mtime_nsec() as u32)
+    }
     pub fn is_stat_match(&self, stat: &Metadata) -> bool {
         (self.mode == util::get_mode_stat(stat)) &&
         self.size == (stat.size() as u32) || self.size == 0
@@ -232,7 +253,7 @@ impl Index {
     fn store_entry(&mut self, entry: EntryAdd) -> Result<()> {
         //TODO find a better way that cloning the entry
         self.keys.insert(entry.clone().key());
-        self.entries.insert(entry.clone().key(), entry);
+        self.entries.insert(entry.clone().key(), RefCell::new(entry));
         Ok(())
     }
 
@@ -262,10 +283,20 @@ impl Index {
         Ok(())
     }
 
-    pub fn each_entry(&self) -> Result<Vec<&EntryAdd>> {
-        let mut entries: Vec<&EntryAdd> = Vec::new();
+    pub fn each_entry(&self) -> Result<Vec<Ref<EntryAdd>>> {
+        let mut entries: Vec<Ref<EntryAdd>> = Vec::new();
         for k in self.keys.iter() {
-            entries.push(self.entries.get(k).ok_or(anyhow!("unable to find EntryAdd"))?);
+            let a = self.entries.get(k).ok_or(anyhow!("unable to find EntryAdd"))?.borrow();
+            entries.push(a);
+        };
+        Ok(entries)
+    }
+
+    pub fn each_mut_entry(&self) -> Result<Vec<RefMut<EntryAdd>>> {
+        let mut entries: Vec<RefMut<EntryAdd>> = Vec::new();
+        for k in self.keys.iter() {
+            let a = self.entries.get(k).ok_or(anyhow!("unable to find EntryAdd"))?.borrow_mut();
+            entries.push(a);
         };
         Ok(entries)
     }
@@ -303,6 +334,11 @@ impl Index {
         // any is a short-circuting function therefore will stop when the closure returns a true.
         let entry_name = path.to_str().expect("Unable to get &str reference from Path");
         self.entries.iter().any(|(key, _)| key.contains(entry_name))
+    }
+
+    pub fn update_entry_stat(&mut self, entry: &mut EntryAdd, stat: &Metadata) -> () {
+        entry.update_entry_stat(stat);
+        self.changed = true;
     }
 }
 

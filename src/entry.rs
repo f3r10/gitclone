@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use crate::{
     util::{self, TreeEntryAux},
-    Blob, Database, Object, Tree,
+    Blob, Database, Tree,
 };
 
 #[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]

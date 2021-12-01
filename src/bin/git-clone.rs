@@ -43,7 +43,7 @@ fn main() -> Result<()> {
             let root_path = current_dir();
             match root_path {
                 Ok(root_path) => {
-                    let mut command = Command::new(root_path)?;
+                    let command = Command::new(root_path)?;
                     command.status()
                 }
                 Err(e) => Err(anyhow!(e)),

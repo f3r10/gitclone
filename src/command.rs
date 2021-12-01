@@ -1,13 +1,15 @@
+use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::fs::{DirEntry, Metadata};
 use std::path::Path;
+use std::rc::Rc;
 use std::{fs, path::PathBuf};
 
 use anyhow::anyhow;
 use anyhow::Result;
 use chrono::Local;
 
-use crate::{Blob, EntryAdd, util};
+use crate::{Blob, util};
 use crate::Author;
 use crate::Commit;
 use crate::Object;
@@ -23,26 +25,30 @@ pub struct Command {
 pub struct Status {
     stat: HashMap<String, Metadata>,
     untracked: BTreeSet<String>,
-    changed: BTreeSet<String>
+    changed: BTreeSet<String>,
+    cmd: Rc<RefCell<Command>>
 }
 
 impl Status {
-    pub fn new() -> Self {
+    pub fn new(cmd: Command) -> Self {
         Status {
             stat: HashMap::new(),
             untracked: BTreeSet::new(),
-            changed: BTreeSet::new()
+            changed: BTreeSet::new(),
+            cmd: Rc::new(RefCell::new(cmd))
         }
     }
-    pub fn run(&mut self, cmd: &mut Command) -> Result<()> {
-        if !cmd.workspace.get_git_path().exists() {
+    pub fn run(&mut self) -> Result<()> {
+        let cmd = self.cmd.clone();
+        if !cmd.borrow().workspace.get_git_path().exists() {
             return Err(anyhow!("not a git repository (or any parent up to mount point /)"))
         }
-        if cmd.workspace.get_git_path().join("index").exists() {
-            cmd.index.load()?;
+        if cmd.borrow().workspace.get_git_path().join("index").exists() {
+            cmd.borrow_mut().index.load()?;
         }
-        self.scan_workspace(None, cmd)?;
-        self.detect_workspace_changes(cmd)?;
+        self.scan_workspace(None)?;
+        self.detect_workspace_changes()?;
+        cmd.borrow().index.write_updates()?;
         self.changed.iter().for_each(|e| {
             println!(" M {}", e)
         });
@@ -53,7 +59,8 @@ impl Status {
 
     }
 
-    pub fn scan_workspace(&mut self, prefix: Option<PathBuf> , cmd: &mut Command) -> Result<()> {
+    pub fn scan_workspace(&mut self, prefix: Option<PathBuf>) -> Result<()> {
+        let cmd = self.cmd.borrow();
         let prefix = prefix.unwrap_or(Path::new("").to_path_buf());
         let e = |e: &Result<DirEntry, std::io::Error>| match e {
                 Ok(p) => p.file_name() != ".git",
@@ -70,7 +77,7 @@ impl Status {
                         self.stat.insert(key.display().to_string(), value.clone());
                     }
                 } else {
-                    if self.any_trackable_file(key.to_path_buf(), value, cmd)? {
+                    if self.any_trackable_file(key.to_path_buf(), value)? {
                         let final_name = if value.is_dir() {
                             format!("{}/", key.display())
                         } else {
@@ -84,7 +91,8 @@ impl Status {
         Ok(())
     }
 
-    pub fn any_trackable_file(&self, path: PathBuf, stat: &Metadata, cmd: &mut Command) -> Result<bool> {
+    pub fn any_trackable_file(&self, path: PathBuf, stat: &Metadata) -> Result<bool> {
+        let cmd = self.cmd.borrow();
         let e = |e: &Result<DirEntry, std::io::Error>| match e {
                 Ok(p) => p.file_name() != ".git",
                 Err(_e) => true,
@@ -115,33 +123,32 @@ impl Status {
         Ok(res)
     }
 
-    pub fn detect_workspace_changes(&mut self, cmd: &mut Command) -> Result<()> {
-        for entry in &cmd.index.each_entry()? {
-            self.check_index_entry(entry)?;
-        }
+    pub fn detect_workspace_changes(&mut self) -> Result<()> {
+        let cmd = self.cmd.clone();
+        let borrow = &mut *cmd.borrow_mut();
+        let index = &borrow.index;
+        let mut entries = index.each_mut_entry()?;
+        while let Some(mut entry) = entries.pop() {
+            let stat = self.stat.get(&entry.get_path());
+            match stat {
+                Some(stat) => {
+                    if !entry.is_stat_match(stat) {
+                        self.changed.insert(entry.get_path());
+                        continue;
+                    }
+
+                    let mut blob = Blob::new(entry.path.to_path_buf())?;
+
+                    if entry.oid == blob.get_oid()? {
+                        entry.update_entry_stat(stat);
+                    } else {
+                        self.changed.insert(entry.get_path());
+                    }
+                },
+                None => (),
+            }
+        };
         Ok(())
-    }
-
-    fn check_index_entry(&mut self, entry: &EntryAdd) -> Result<()> {
-        let stat = self.stat.get(&entry.get_path());
-        match stat {
-            Some(stat) => {
-                if !entry.is_stat_match(stat) {
-                    self.changed.insert(entry.get_path());
-                    // if it is possible to detect a difference with stat then is not necessary to read
-                    // the file
-                    return Ok(())
-                }
-
-                let mut blob = Blob::new(entry.path.to_path_buf())?;
-
-                if !(entry.oid == blob.get_oid()?) {
-                    self.changed.insert(entry.get_path());
-                }
-                Ok(())
-            },
-            None => Ok(()),
-        }
     }
 }
 
@@ -157,9 +164,9 @@ impl Command {
         })
     }
 
-    pub fn status(&mut self) -> Result<()> {
-        let mut status = Status::new();
-        status.run(self)
+    pub fn status(self) -> Result<()> {
+        let mut status = Status::new(self);
+        status.run()
     }
     pub fn init(&self) -> Result<()> {
         let git_path = &self.workspace.get_git_path();

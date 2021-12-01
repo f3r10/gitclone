@@ -1,3 +1,4 @@
+use std::cell::Ref;
 use std::collections::HashMap;
 use std::fs;
 use std::fs::DirEntry;
@@ -83,7 +84,7 @@ impl Workspace {
         Ok(root)
     }
 
-    pub fn create_tree_from_index(&self, entries_add: Vec<&EntryAdd>) -> Result<TreeAux> {
+    pub fn create_tree_from_index(&self, entries_add: Vec<Ref<EntryAdd>>) -> Result<TreeAux> {
         let mut root = TreeAux::new();
         for e in entries_add.into_iter() {
             let mut ancestors: Vec<_> = e

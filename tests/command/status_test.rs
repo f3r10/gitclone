@@ -1,4 +1,4 @@
-use std::fs::{self, Permissions};
+use std::fs::{self, OpenOptions, Permissions};
 use std::os::unix::prelude::PermissionsExt;
 use std::{env, path::Path, process};
 use assert_cmd::prelude::*;
@@ -340,4 +340,47 @@ fn reports_modified_files_with_unchanged_size() {
         .assert()
         .success()
         .stdout(is_match("^( M a/b/3.txt\\n)$").unwrap());
+}
+
+
+#[test]
+fn prints_nothing_if_a_file_is_touched() {
+    let temp_dir = TempDir::new().unwrap();
+    assert!(env::set_current_dir(&temp_dir).is_ok());
+    let temp_path = temp_dir.path().to_owned();
+    let _paths =
+        util::write_file(&temp_path, 
+            vec![ (Path::new("1.txt").to_path_buf(), "one".as_bytes()),
+            (Path::new("a").join("2.txt"), "two".as_bytes()),
+            (Path::new("a/b/").join("3.txt"), "three".as_bytes())
+            ]).unwrap();
+    process::Command::cargo_bin("git-clone")
+        .unwrap()
+        .args(&["init"])
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(contains("Initialized empty Jit repository in"));
+    process::Command::cargo_bin("git-clone")
+        .unwrap()
+        .args(&["add", "."])
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(is_empty());
+    process::Command::cargo_bin("git-clone")
+        .unwrap()
+        .args(&["commit", "-m", "commit message"])
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(contains("commit message"));
+    let _f = OpenOptions::new().write(true).truncate(false).open("1.txt").unwrap();
+    process::Command::cargo_bin("git-clone")
+        .unwrap()
+        .args(&["status"])
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(is_empty());
 }
