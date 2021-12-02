@@ -22,10 +22,16 @@ pub struct Command {
     pub index: Index,
 }
 
+#[derive(Ord, PartialEq, PartialOrd, Eq)]
+pub enum StatusChanged{
+    WorkspaceDeleted(String),
+    WorkspaceModified(String)
+}
+
 pub struct Status {
     stat: HashMap<String, Metadata>,
     untracked: BTreeSet<String>,
-    changed: BTreeSet<String>,
+    changed: BTreeSet<StatusChanged>,
     cmd: Rc<RefCell<Command>>
 }
 
@@ -50,7 +56,10 @@ impl Status {
         self.detect_workspace_changes()?;
         cmd.borrow().index.write_updates()?;
         self.changed.iter().for_each(|e| {
-            println!(" M {}", e)
+            match e {
+               StatusChanged::WorkspaceDeleted(path)  => println!(" D {}", path),
+               StatusChanged::WorkspaceModified(path) => println!(" M {}", path)
+            }
         });
         self.untracked.iter().for_each(|e| {
             println!("?? {}", e)
@@ -135,7 +144,7 @@ impl Status {
                 match stat {
                     Some(stat) => {
                         if !entry.is_stat_match(stat) {
-                            self.changed.insert(entry.get_path());
+                            self.changed.insert(StatusChanged::WorkspaceModified(entry.get_path()));
                             continue;
                         }
 
@@ -153,10 +162,12 @@ impl Status {
                             entry.update_entry_stat(stat);
                             changed_index = true;
                         } else {
-                            self.changed.insert(entry.get_path());
+                            self.changed.insert(StatusChanged::WorkspaceModified(entry.get_path()));
                         }
                     },
-                    None => (),
+                    None => { 
+                        self.changed.insert(StatusChanged::WorkspaceDeleted(entry.get_path()));
+                    },
                 }
             };
         }
