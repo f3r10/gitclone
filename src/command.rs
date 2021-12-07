@@ -218,7 +218,7 @@ impl Command {
         let root = self.workspace.create_tree_from_paths(paths)?;
         let tree = &self.workspace.build_add_tree(root, &self.db)?;
         self.workspace
-            .create_index_entry(&tree, &self.db, &mut self.index)?;
+            .create_index_entry(&tree, &mut self.index)?;
         self.index.write_updates()?;
         Ok(())
     }

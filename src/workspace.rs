@@ -110,22 +110,25 @@ impl Workspace {
         Ok(tree)
     }
 
-    pub fn create_index_entry(&self, tree: &Tree, db: &Database, index: &mut Index) -> Result<()> {
-        for entry in &tree.entries {
-            match entry {
-                EntryWrapper::Entry { entry: e, name: _ } => {
-                    let stat = util::stat_file(&e.path.canonicalize()?)?;
-                    match &e.oid {
-                        Some(oid) => {
-                            index.add(e.path.to_path_buf(), oid.to_vec(), stat)?;
-                        }
-                        None => {
-                            anyhow!("Unable to build entry because there is not a valid oid");
+    pub fn create_index_entry(&self, tree: &Tree, index: &mut Index) -> Result<()> {
+        let mut work = vec![tree];
+        while let Some(tree) = work.pop() {
+            for entry in &tree.entries {
+                match entry {
+                    EntryWrapper::Entry { entry: e, name: _ } => {
+                        let stat = util::stat_file(&e.path.canonicalize()?)?;
+                        match &e.oid {
+                            Some(oid) => {
+                                index.add(e.path.to_path_buf(), oid.to_vec(), stat)?;
+                            }
+                            None => {
+                                anyhow!("Unable to build entry because there is not a valid oid");
+                            }
                         }
                     }
-                }
-                EntryWrapper::EntryTree { tree, name: _ } => {
-                    self.create_index_entry(&tree, db, index)?
+                    EntryWrapper::EntryTree { tree, name: _ } => {
+                        work.push(tree)
+                    }
                 }
             }
         }
