@@ -3,7 +3,7 @@ use std::{fmt::Display, path::PathBuf};
 
 use anyhow::Result;
 
-use crate::Object;
+use crate::{Database, Object};
 use crate::{Blob, Tree};
 
 #[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
@@ -46,7 +46,7 @@ impl Entry {
         }
     }
 
-    pub fn from_file(path: PathBuf) -> Result<Self> {
+    pub fn from_file(path: PathBuf, db: &Database) -> Result<Self> {
         let metadata = path.metadata()?;
         let filetype = metadata.file_type();
 
@@ -64,16 +64,16 @@ impl Entry {
                 mode.push_str("100644")
             }
             let mut blob = Blob::new(path.clone())?;
-            // db.store(&mut blob);
             sha1_hash = blob.get_oid()?;
+            db.store(&mut blob)?;
         } else if filetype.is_symlink() {
             mode.push_str("120000");
             let mut blob = Blob::new(path.clone())?;
-            // db.store(&mut blob);
             sha1_hash = blob.get_oid()?;
+            db.store(&mut blob)?;
         } else if filetype.is_dir() {
             mode.push_str("040000");
-            let tree = Tree::new(path.clone())?;
+            let tree = Tree::new(path.clone(), db)?;
             entries = tree.entries;
             sha1_hash = tree.sha1_hash;
         }

@@ -88,7 +88,7 @@ impl Tree {
         Ok(tree)
     }
 
-    pub fn new(path: PathBuf) -> Result<Self> {
+    pub fn new(path: PathBuf, db: &Database) -> Result<Self> {
         let mut paths: Vec<PathBuf> = vec![];
         let mut dir = std::fs::read_dir(path)?;
         while let Some(Ok(entry)) = dir.next() {
@@ -101,7 +101,7 @@ impl Tree {
 
         let mut entries: Vec<Entry> = vec![];
         for path in paths {
-            let entry = Entry::from_file(path)?;
+            let entry = Entry::from_file(path, db)?;
             entries.push(entry);
         }
 
@@ -135,7 +135,6 @@ impl Tree {
                 let mut tree = Tree::new_with_entries(e.entries.clone())?;
                 tree.save_tree(&db)?;
             }
-            db.store(e)?;
         }
         db.store(self)?;
         Ok(())
@@ -187,7 +186,7 @@ impl Tree {
         Ok(())
     }
 
-    pub fn new_from_files(paths: Vec<PathBuf>) -> Result<Self> {
+    pub fn new_from_files(paths: Vec<PathBuf>, db: &Database) -> Result<Self> {
         let paths = util::flatten_dot(paths)?;
         let mut root_tree_entries = vec![];
         for path in &paths {
@@ -197,7 +196,7 @@ impl Tree {
                     &path
                 )));
             }
-            let entry = Entry::from_file(path.to_path_buf())?;
+            let entry = Entry::from_file(path.to_path_buf(), db)?;
             root_tree_entries.push(entry);
         }
         Tree::new_with_entries(root_tree_entries)

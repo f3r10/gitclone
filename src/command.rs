@@ -217,7 +217,7 @@ impl Command {
         if self.workspace.get_git_path().join("index").exists() {
             self.index.load()?;
         }
-        let tree = Tree::new_from_files(paths)?;
+        let tree = Tree::new_from_files(paths, &self.db)?;
         self.workspace
             .create_index_entry(&tree, &mut self.index)?;
         self.index.write_updates()?;
