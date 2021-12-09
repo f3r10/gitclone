@@ -154,7 +154,9 @@ impl Status {
                             continue;
                         }
 
-                        let mut blob = Blob::new(entry.path.to_path_buf())?;
+                        let data = util::read_file(entry.path.to_path_buf())?;
+
+                        let blob = Blob::new(data)?;
 
                         // if the file has not changed despite the previous checks, it is necessary to
                         // update index info for the next time.
@@ -183,9 +185,11 @@ impl Status {
 impl Command {
     pub fn new(path_buf: PathBuf) -> Result<Self> {
         let ws = Workspace::new(&path_buf);
-        let db = Database::new(&path_buf.join(".git/objects"));
+        let mut db = Database::new(&path_buf.join(".git/objects"));
         let index = Index::new(&path_buf.join(".git/index"));
-        // db.read_object("0f08537554a4a878bd89e611cfd2c3bfe4ca5dfc".to_string())?;
+        // let refs = Refs::new(&ws.get_git_path());
+        // let head_oid = refs.read_head().unwrap();
+        // db.show_commit(head_oid)?;
         Ok(Command {
             workspace: ws,
             db,
@@ -244,7 +248,8 @@ impl Command {
             author,
             message.to_string(),
             parent.clone(),
-        );
+            None
+        )?;
         self.db.store(&mut commit)?;
         refs.update_head(util::encode_vec(&commit.get_oid()?))?;
         let is_root = if parent.is_none() {

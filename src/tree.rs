@@ -7,6 +7,7 @@ use crate::{
     util::{self, TreeEntryAux},
     Database, Object,
 };
+use std::path::Path;
 use std::{
     io::{BufRead, Cursor, Read},
     path::PathBuf,
@@ -55,7 +56,7 @@ impl Object for Tree {
         "tree"
     }
 
-    fn get_oid(&mut self) -> Result<Vec<u8>> {
+    fn get_oid(&self) -> Result<Vec<u8>> {
         Ok(self.sha1_hash.to_vec())
     }
 }
@@ -161,29 +162,35 @@ impl Tree {
         Ok(data)
     }
 
-    pub fn parse(cursor: &mut Cursor<Vec<u8>>) -> Result<()> {
+    pub fn parse(cursor: &mut Cursor<Vec<u8>>, sha1_hash: Vec<u8>) -> Result<Self> {
+        let mut entries = vec![];
         loop {
             let mut mode = vec![];
             let num_read = cursor.read_until(0x20u8, &mut mode)?;
             if num_read == 0 {
                 break;
             }
-            let mode = String::from_utf8(mode)?;
-            println!("mode: {:?}", mode.trim());
+            let mode = String::from_utf8(mode)?.trim().to_string();
+            // println!("mode: {:?}", mode.trim());
 
             let mut name = vec![];
             cursor.read_until(0x00, &mut name)?;
             let mut name = String::from_utf8(name.to_vec())?;
-            println!("name: {:?}", name);
+            // println!("name: {:?}", name);
             name.pop();
-            println!("name after pop: {:?}", name);
+            // println!("name after pop: {:?}", name);
 
             let mut sha1_hash: [u8; 20] = [0; 20];
             cursor.read_exact(&mut sha1_hash)?;
-            println!("hash: {:?}", sha1_hash);
+            // println!("hash: {:?}", sha1_hash);
+            let entry = Entry::new(mode, sha1_hash.to_vec(), Path::new("").to_path_buf(), name, vec![]);
+            entries.push(entry)
         }
+        Ok(Self{
+            entries,
+            sha1_hash
+        })
 
-        Ok(())
     }
 
     pub fn new_from_files(paths: Vec<PathBuf>, db: &Database) -> Result<Self> {

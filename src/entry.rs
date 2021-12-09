@@ -3,7 +3,7 @@ use std::{fmt::Display, path::PathBuf};
 
 use anyhow::Result;
 
-use crate::{Database, Object};
+use crate::{Database, Object, util};
 use crate::{Blob, Tree};
 
 #[derive(Eq, Clone, PartialEq, PartialOrd, Debug)]
@@ -24,7 +24,7 @@ impl Object for Entry {
         self.mode.as_str()
     }
 
-    fn get_oid(&mut self) -> Result<Vec<u8>> {
+    fn get_oid(&self) -> Result<Vec<u8>> {
         Ok(self.sha1_hash.to_vec())
     }
 }
@@ -63,12 +63,14 @@ impl Entry {
             } else {
                 mode.push_str("100644")
             }
-            let mut blob = Blob::new(path.clone())?;
+            let data = util::read_file(path.clone())?;
+            let mut blob = Blob::new(data)?;
             sha1_hash = blob.get_oid()?;
             db.store(&mut blob)?;
         } else if filetype.is_symlink() {
             mode.push_str("120000");
-            let mut blob = Blob::new(path.clone())?;
+            let data = util::read_file(path.clone())?;
+            let mut blob = Blob::new(data)?;
             sha1_hash = blob.get_oid()?;
             db.store(&mut blob)?;
         } else if filetype.is_dir() {

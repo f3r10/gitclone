@@ -5,7 +5,5 @@ pub trait Object {
 
     fn type_(&self) -> &str;
 
-    // fn set_oid(&mut self, oid: String);
-
-    fn get_oid(&mut self) -> Result<Vec<u8>>;
+    fn get_oid(&self) -> Result<Vec<u8>>;
 }
