@@ -17,7 +17,6 @@ pub use checksum::Checksum;
 pub use commit::Commit;
 pub use database::Database;
 pub use entry::Entry;
-pub use entry::EntryWrapper;
 pub use index::EntryAdd;
 pub use index::Index;
 pub use object::Object;

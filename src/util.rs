@@ -12,8 +12,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::Object;
-use crate::{Entry, EntryWrapper};
+use crate::Entry;
 
 #[derive(Debug)]
 pub enum TreeEntryAux {
@@ -36,6 +35,7 @@ impl TreeAux {
         ancestors: Vec<PathBuf>,
         root_path: PathBuf,
         oid_o: Option<Vec<u8>>,
+        mode: u32
     ) -> Result<()> {
         let tea = TreeEntryAux::TreeBranchAux {
             tree: TreeAux::new(),
@@ -53,7 +53,7 @@ impl TreeAux {
                 TreeEntryAux::TreeLeafAux { entry: _entry } => {}
                 TreeEntryAux::TreeBranchAux { tree } => {
                     if let Some((_, elements)) = ancestors.split_first() {
-                        tree.add_entry(elements.to_vec(), root_path.to_path_buf(), oid_o)?;
+                        tree.add_entry(elements.to_vec(), root_path.to_path_buf(), oid_o, mode)?;
                     }
                 }
             }
@@ -61,7 +61,9 @@ impl TreeAux {
             let mut comps = root_path.components();
             let comp = comps.next_back().ok_or(anyhow!("unable to get last component of path"))?;
             let comp: &Path = comp.as_ref();
-            let e = Entry::new(&root_path, oid_o)?;
+            let mode = get_mode_u(mode);
+            let name = root_path.file_name().expect("Expected a name").to_str().expect("Invalif filename").to_string();
+            let e = Entry::new(mode, oid_o.unwrap(), root_path.to_path_buf(), name, vec![]);
             let leaf = TreeEntryAux::TreeLeafAux { entry: e };
             self.entries.insert(comp.to_path_buf(), leaf);
         }
@@ -69,56 +71,15 @@ impl TreeAux {
     }
 }
 
-pub fn get_data(entries: &mut Vec<EntryWrapper>) -> Result<Vec<u8>> {
-    let mut acc_data: Vec<u8> = Vec::new();
-    entries.sort_by(|a, b| match (a, b) {
-        (
-            EntryWrapper::EntryTree { tree: _, name: n1 },
-            EntryWrapper::EntryTree { tree: _, name: n2 },
-        ) => n1.cmp(&n2),
-        (
-            EntryWrapper::EntryTree { tree: _, name: n1 },
-            EntryWrapper::Entry { entry: _, name: n2 },
-        ) => n1.cmp(&n2),
-        (
-            EntryWrapper::Entry { entry: _, name: n1 },
-            EntryWrapper::Entry { entry: _, name: n2 },
-        ) => n1.cmp(&n2),
-        (
-            EntryWrapper::Entry { entry: _, name: n1 },
-            EntryWrapper::EntryTree { tree: _, name: n2 },
-        ) => n1.cmp(&n2),
-    });
-    entries
-        .into_iter()
-        .map(|entry| match entry {
-            EntryWrapper::Entry { entry, name: _ } => {
-                acc_data.extend(entry.get_data()?);
-                acc_data.to_vec();
-                Ok(())
-            }
-            EntryWrapper::EntryTree { tree, name: _ } => {
-                let oid = tree.get_oid()?;
-                let mut data = Vec::new();
-                data.extend_from_slice("040000".as_bytes());
-                data.push(0x20u8);
-                data.extend_from_slice(
-                    tree.parent
-                        .file_name()
-                        .expect("unable to get filename")
-                        .to_str()
-                        .expect("invalid filename")
-                        .as_bytes(),
-                );
-                data.push(0x00u8);
-                data.extend_from_slice(&oid);
-                acc_data.extend(data);
-                acc_data.to_vec();
-                Ok(())
-            }
-        })
-        .collect::<Result<Vec<_>>>()?;
-    Ok(acc_data)
+pub fn get_mode_u(mode_u: u32) -> String {
+    let mut mode = String::new();
+    let is_executable = (mode_u & 0o001) != 0;
+    if is_executable {
+        mode.push_str("100755")
+    } else {
+        mode.push_str("100644")
+    }
+    mode
 }
 
 pub fn read_file(path: PathBuf) -> Result<Vec<u8>> {
