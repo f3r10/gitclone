@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::{DirEntry, Metadata};
 use std::path::Path;
 use std::rc::Rc;
@@ -9,8 +9,9 @@ use anyhow::anyhow;
 use anyhow::Result;
 use chrono::Local;
 
+use crate::database::ObjectType;
 use crate::tree::{self, Tree};
-use crate::{Blob, util};
+use crate::{Blob, Entry, util};
 use crate::Author;
 use crate::Commit;
 use crate::Object;
@@ -21,19 +22,28 @@ pub struct Command {
     workspace: Workspace,
     db: Database,
     pub index: Index,
+    refs: Refs
 }
 
+
 #[derive(Ord, PartialEq, PartialOrd, Eq)]
-pub enum StatusChanged{
-    WorkspaceDeleted(String),
-    WorkspaceModified(String)
+pub enum WorkspaceStatus{
+    Deleted,
+    Modified,
+    Default
+}
+#[derive(Ord, PartialEq, PartialOrd, Eq)]
+pub enum IndexStatus{
+    Added,
+    Default
 }
 
 pub struct Status {
     stat: HashMap<String, Metadata>,
     untracked: BTreeSet<String>,
-    changed: BTreeSet<StatusChanged>,
-    cmd: Rc<RefCell<Command>>
+    changed: BTreeMap<String, (WorkspaceStatus, IndexStatus)>,
+    cmd: Rc<RefCell<Command>>,
+    head_tree: HashMap<String, Entry>
 }
 
 impl Status {
@@ -41,8 +51,9 @@ impl Status {
         Status {
             stat: HashMap::new(),
             untracked: BTreeSet::new(),
-            changed: BTreeSet::new(),
-            cmd: Rc::new(RefCell::new(cmd))
+            changed: BTreeMap::new(),
+            cmd: Rc::new(RefCell::new(cmd)),
+            head_tree: HashMap::new()
         }
     }
     pub fn run(&mut self) -> Result<()> {
@@ -54,12 +65,30 @@ impl Status {
             cmd.borrow_mut().index.load()?;
         }
         self.scan_workspace(None)?;
-        self.detect_workspace_changes()?;
+        if cmd.borrow().refs.head_path().exists() {
+            self.load_head_tree()?;
+        }
+        self.check_index_entries()?;
         cmd.borrow().index.write_updates()?;
-        self.changed.iter().for_each(|e| {
-            match e {
-               StatusChanged::WorkspaceDeleted(path)  => println!(" D {}", path),
-               StatusChanged::WorkspaceModified(path) => println!(" M {}", path)
+        self.changed.iter().for_each(|(path, status)| {
+            match status {
+                (WorkspaceStatus::Deleted, IndexStatus::Added) => {
+                    println!(" AD {}", path)
+                },
+                (WorkspaceStatus::Deleted, IndexStatus::Default) => {
+                    println!(" D {}", path)
+                },
+                (WorkspaceStatus::Modified, IndexStatus::Added) => {
+                    println!(" AM {}", path)
+                },
+                (WorkspaceStatus::Modified, IndexStatus::Default) => {
+                    println!(" M {}", path)
+                },
+                (WorkspaceStatus::Default, IndexStatus::Default) => {
+                },
+                (WorkspaceStatus::Default, IndexStatus::Added) => {
+                    println!(" A {}", path)
+                },
             }
         });
         self.untracked.iter().for_each(|e| {
@@ -133,7 +162,7 @@ impl Status {
         Ok(res)
     }
 
-    pub fn detect_workspace_changes(&mut self) -> Result<()> {
+    pub fn check_index_entries(&mut self) -> Result<()> {
         let cmd = self.cmd.clone();
         let borrow = &mut *cmd.borrow_mut();
         let mut changed_index: bool = false;
@@ -141,16 +170,27 @@ impl Status {
             let index = &borrow.index;
             let mut entries = index.each_mut_entry()?;
             while let Some(mut entry) = entries.pop() {
+                let mut head_tree_status = IndexStatus::Default; 
+                if !self.head_tree.contains_key(&entry.get_path()) {
+                    head_tree_status = IndexStatus::Added
+                }
                 let stat = self.stat.get(&entry.get_path());
                 match stat {
                     Some(stat) => {
                         if !entry.is_stat_match(stat) {
-                            self.changed.insert(StatusChanged::WorkspaceModified(entry.get_path()));
+                            let workspace_status = WorkspaceStatus::Modified;
+                            self.changed.insert(
+                                entry.get_path(), 
+                                (workspace_status, head_tree_status));
                             continue;
-                        }
+                        } 
 
                         // we want to avoid whatever is possible to read a file's content
                         if entry.times_match(stat) {
+                            let workspace_status = WorkspaceStatus::Default;
+                            self.changed.insert(
+                                entry.get_path(), 
+                                (workspace_status, head_tree_status));
                             continue;
                         }
 
@@ -165,11 +205,17 @@ impl Status {
                             entry.update_entry_stat(stat);
                             changed_index = true;
                         } else {
-                            self.changed.insert(StatusChanged::WorkspaceModified(entry.get_path()));
+                            let workspace_status = WorkspaceStatus::Modified;
+                            self.changed.insert(
+                                entry.get_path(), 
+                                (workspace_status, head_tree_status));
                         }
-                    },
+                        }
                     None => { 
-                        self.changed.insert(StatusChanged::WorkspaceDeleted(entry.get_path()));
+                        let workspace_status = WorkspaceStatus::Deleted;
+                        self.changed.insert(
+                            entry.get_path(), 
+                            (workspace_status, head_tree_status));
                     },
                 }
             };
@@ -180,20 +226,77 @@ impl Status {
         }
         Ok(())
     }
+
+    pub fn load_head_tree(&mut self) -> Result<()> {
+        let cmd = self.cmd.clone();
+        let head_oid = cmd.borrow().refs.read_head().ok_or(anyhow!("unable to read HEAD file"))?;
+        let commit = self.get_commit_tree(head_oid)?;
+        self.read_tree(&commit, Path::new("").to_path_buf())?;
+        Ok(())
+    }
+
+
+    fn get_commit_tree(&self, head_oid: String) -> Result<String> {
+        let cmd = self.cmd.clone();
+        let borrow = &mut *cmd.borrow_mut();
+        let commit = borrow.db.load(&head_oid)?;
+        match commit  {
+            ObjectType::CommitType{commit: c} => {
+                Ok(c.tree_ref.clone())
+            },
+            ObjectType::BlobType{blob: _} => {
+                Err(anyhow!("this is not a valid commit object"))
+            },
+            ObjectType::TreeType{tree: _} => {
+                Err(anyhow!("this is not a valid commit object"))
+            },
+        }
+    }
+
+    pub fn read_tree(&mut self, oid: &str, prefix: PathBuf) -> Result<()> {
+        let cmd = self.cmd.clone();
+        let borrow = &mut *cmd.borrow_mut();
+        let mut work = vec![(oid.to_string(), prefix)];
+        while let Some((oid_, prefix_)) = work.pop() {
+            let tree = borrow.db.load(&oid_)?;
+            match tree {
+                ObjectType::CommitType{commit: _} => {
+                },
+                ObjectType::BlobType{blob: _} => {
+                },
+                ObjectType::TreeType{tree} => {
+                    // println!("to process: {:?}", tree);
+                    for e in tree.entries.iter() {
+                        // println!("to process entry: {:?}, is tree {:?}", e, e.is_tree());
+                        let path = prefix_.join(&e.name);
+                        if e.is_tree() {
+                            let oid_inner = util::encode_vec(&e.get_oid()?);
+                            work.push((oid_inner, path))
+                        } else {
+                            self.head_tree.insert(path.display().to_string(), e.clone());
+                            // let mode = &e.mode;
+                            // let oid_inner = util::encode_vec(&e.get_oid()?);
+                            // println!("{} {:?} {:?}", mode, oid_inner, path);
+                        }
+                    }
+                },
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Command {
     pub fn new(path_buf: PathBuf) -> Result<Self> {
         let ws = Workspace::new(&path_buf);
-        let mut db = Database::new(&path_buf.join(".git/objects"));
+        let db = Database::new(&path_buf.join(".git/objects"));
         let index = Index::new(&path_buf.join(".git/index"));
-        // let refs = Refs::new(&ws.get_git_path());
-        // let head_oid = refs.read_head().unwrap();
-        // db.show_commit(head_oid)?;
+        let refs = Refs::new(&ws.get_git_path());
         Ok(Command {
             workspace: ws,
             db,
             index,
+            refs
         })
     }
 
