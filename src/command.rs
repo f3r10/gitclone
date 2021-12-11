@@ -35,6 +35,7 @@ pub enum WorkspaceStatus{
 #[derive(Ord, PartialEq, PartialOrd, Eq)]
 pub enum IndexStatus{
     Added,
+    Modified,
     Default
 }
 
@@ -78,16 +79,25 @@ impl Status {
                 (WorkspaceStatus::Deleted, IndexStatus::Default) => {
                     println!(" D {}", path)
                 },
+                (WorkspaceStatus::Deleted, IndexStatus::Modified) => {
+                    println!(" MD {}", path)
+                },
                 (WorkspaceStatus::Modified, IndexStatus::Added) => {
                     println!(" AM {}", path)
                 },
                 (WorkspaceStatus::Modified, IndexStatus::Default) => {
                     println!(" M {}", path)
                 },
+                (WorkspaceStatus::Modified, IndexStatus::Modified) => {
+                    println!(" MM {}", path)
+                },
                 (WorkspaceStatus::Default, IndexStatus::Default) => {
                 },
                 (WorkspaceStatus::Default, IndexStatus::Added) => {
                     println!(" A {}", path)
+                },
+                (WorkspaceStatus::Default, IndexStatus::Modified) => {
+                    println!(" M {}", path)
                 },
             }
         });
@@ -171,7 +181,12 @@ impl Status {
             let mut entries = index.each_mut_entry()?;
             while let Some(mut entry) = entries.pop() {
                 let mut head_tree_status = IndexStatus::Default; 
-                if !self.head_tree.contains_key(&entry.get_path()) {
+                if self.head_tree.contains_key(&entry.get_path()) {
+                    let head_entry = self.head_tree.get(&entry.get_path()).unwrap();
+                    if !(util::get_mode_u(entry.get_mode()?) == head_entry.mode && entry.oid == head_entry.sha1_hash) {
+                        head_tree_status = IndexStatus::Modified
+                    }
+                } else {
                     head_tree_status = IndexStatus::Added
                 }
                 let stat = self.stat.get(&entry.get_path());

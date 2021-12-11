@@ -71,17 +71,6 @@ impl TreeAux {
     }
 }
 
-pub fn get_mode_u(mode_u: u32) -> String {
-    let mut mode = String::new();
-    let is_executable = (mode_u & 0o001) != 0;
-    if is_executable {
-        mode.push_str("100755")
-    } else {
-        mode.push_str("100644")
-    }
-    mode
-}
-
 pub fn read_file(path: PathBuf) -> Result<Vec<u8>> {
     let msg = format!("open ('{:?}'): Permission denied", &path);
     let res = fs::read(path).map_err(|_| anyhow!(msg))?;
@@ -109,6 +98,17 @@ pub fn get_mode(path_buf: PathBuf) -> Result<u32> {
     } else {
         Ok(REGULAR_MODE)
     }
+}
+
+pub fn get_mode_u(mode_u: u32) -> String {
+    let mut mode = String::new();
+    let is_executable = (mode_u & 0o001) != 0;
+    if is_executable {
+        mode.push_str("100755")
+    } else {
+        mode.push_str("100644")
+    }
+    mode
 }
 
 pub fn get_mode_stat(stat: &Metadata) -> u32 {

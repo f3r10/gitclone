@@ -592,3 +592,57 @@ fn reports_a_file_added_to_an_untracked_directory() {
         .success()
         .stdout(is_match("^( A d/e/5.txt\\n)$").unwrap());
 }
+
+
+#[test]
+fn reports_modified_modes() {
+    // before do
+    let temp_dir = TempDir::new().unwrap();
+    assert!(env::set_current_dir(&temp_dir).is_ok());
+    let temp_path = temp_dir.path().to_owned();
+    let paths =
+        util::write_file(&temp_path, 
+            vec![ (Path::new("1.txt").to_path_buf(), "one".as_bytes()),
+            (Path::new("a").join("2.txt"), "two".as_bytes()),
+            (Path::new("a/b/").join("3.txt"), "three".as_bytes())
+            ]).unwrap();
+    process::Command::cargo_bin("git-clone")
+        .unwrap()
+        .args(&["init"])
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(contains("Initialized empty Jit repository in"));
+    process::Command::cargo_bin("git-clone")
+        .unwrap()
+        .args(&["add", "."])
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(is_empty());
+    process::Command::cargo_bin("git-clone")
+        .unwrap()
+        .args(&["commit", "-m", "commit message"])
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(contains("commit message"));
+    //end
+    let perms = Permissions::from_mode(0o100755);
+    fs::set_permissions(paths[0].to_path_buf(), perms).unwrap();
+    process::Command::cargo_bin("git-clone")
+        .unwrap()
+        .args(&["add", "."])
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(is_empty());
+
+    process::Command::cargo_bin("git-clone")
+        .unwrap()
+        .args(&["status"])
+        .current_dir(&temp_dir)
+        .assert()
+        .success()
+        .stdout(is_match("^( M 1.txt\\n)$").unwrap());
+}
