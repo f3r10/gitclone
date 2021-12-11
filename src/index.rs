@@ -335,7 +335,11 @@ impl Index {
         // is neccesary to create an aux data structure to save parent directories.  
         // any is a short-circuting function therefore will stop when the closure returns a true.
         let entry_name = path.to_str().expect("Unable to get &str reference from Path");
-        self.entries.iter().any(|(key, _)| key.contains(entry_name))
+        self.is_tracked_file(path.display().to_string().as_str()) || self.entries.iter().any(|(key, _)| key.contains(entry_name))
+    }
+
+    pub fn is_tracked_file(&self, file: &str) -> bool {
+        self.entries.contains_key(file)
     }
 
     pub fn update_changed_status(&mut self) -> () {

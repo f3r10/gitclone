@@ -36,6 +36,7 @@ pub enum WorkspaceStatus{
 pub enum IndexStatus{
     Added,
     Modified,
+    Deleted,
     Default
 }
 
@@ -70,6 +71,7 @@ impl Status {
             self.load_head_tree()?;
         }
         self.check_index_entries()?;
+        self.collect_deleted_head_entries()?;
         cmd.borrow().index.write_updates()?;
         self.changed.iter().for_each(|(path, status)| {
             match status {
@@ -82,6 +84,9 @@ impl Status {
                 (WorkspaceStatus::Deleted, IndexStatus::Modified) => {
                     println!(" MD {}", path)
                 },
+                (WorkspaceStatus::Deleted, IndexStatus::Deleted) => {
+                    println!(" DD {}", path)
+                },
                 (WorkspaceStatus::Modified, IndexStatus::Added) => {
                     println!(" AM {}", path)
                 },
@@ -91,6 +96,9 @@ impl Status {
                 (WorkspaceStatus::Modified, IndexStatus::Modified) => {
                     println!(" MM {}", path)
                 },
+                (WorkspaceStatus::Modified, IndexStatus::Deleted) => {
+                    println!(" DM {}", path)
+                },
                 (WorkspaceStatus::Default, IndexStatus::Default) => {
                 },
                 (WorkspaceStatus::Default, IndexStatus::Added) => {
@@ -98,6 +106,9 @@ impl Status {
                 },
                 (WorkspaceStatus::Default, IndexStatus::Modified) => {
                     println!(" M {}", path)
+                },
+                (WorkspaceStatus::Default, IndexStatus::Deleted) => {
+                    println!(" D {}", path)
                 },
             }
         });
@@ -295,6 +306,17 @@ impl Status {
                         }
                     }
                 },
+            }
+        }
+        Ok(())
+    }
+
+    fn collect_deleted_head_entries(&mut self) -> Result<()> {
+        for (path, _) in self.head_tree.iter() {
+            if !self.cmd.borrow().index.is_tracked_file(path) {
+                self.changed.insert(
+                    path.to_string(), 
+                    (WorkspaceStatus::Default, IndexStatus::Deleted));
             }
         }
         Ok(())
