@@ -1,5 +1,5 @@
-use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::cell::{RefCell, RefMut};
+use std::collections::{BTreeSet, HashMap};
 use std::fs::{DirEntry, Metadata};
 use std::path::Path;
 use std::rc::Rc;
@@ -11,7 +11,7 @@ use chrono::Local;
 
 use crate::database::ObjectType;
 use crate::tree::{self, Tree};
-use crate::{Blob, Entry, util};
+use crate::{Blob, Entry, EntryAdd, util};
 use crate::Author;
 use crate::Commit;
 use crate::Object;
@@ -26,24 +26,29 @@ pub struct Command {
 }
 
 
+pub enum SetStatus {
+    WorkspaceSet(WorkspaceStatus),
+    IndexSet(IndexStatus)
+} 
+
 #[derive(Ord, PartialEq, PartialOrd, Eq)]
 pub enum WorkspaceStatus{
     Deleted,
     Modified,
-    Default
 }
 #[derive(Ord, PartialEq, PartialOrd, Eq)]
 pub enum IndexStatus{
     Added,
     Modified,
     Deleted,
-    Default
 }
 
 pub struct Status {
     stat: HashMap<String, Metadata>,
     untracked: BTreeSet<String>,
-    changed: BTreeMap<String, (WorkspaceStatus, IndexStatus)>,
+    changed: BTreeSet<String>,
+    index_changes: HashMap<String, IndexStatus>,
+    workspace_changes: HashMap<String, WorkspaceStatus>,
     cmd: Rc<RefCell<Command>>,
     head_tree: HashMap<String, Entry>
 }
@@ -53,8 +58,10 @@ impl Status {
         Status {
             stat: HashMap::new(),
             untracked: BTreeSet::new(),
-            changed: BTreeMap::new(),
+            changed: BTreeSet::new(),
             cmd: Rc::new(RefCell::new(cmd)),
+            index_changes: HashMap::new(),
+            workspace_changes: HashMap::new(),
             head_tree: HashMap::new()
         }
     }
@@ -73,44 +80,21 @@ impl Status {
         self.check_index_entries()?;
         self.collect_deleted_head_entries()?;
         cmd.borrow().index.write_updates()?;
-        self.changed.iter().for_each(|(path, status)| {
-            match status {
-                (WorkspaceStatus::Deleted, IndexStatus::Added) => {
-                    println!(" AD {}", path)
-                },
-                (WorkspaceStatus::Deleted, IndexStatus::Default) => {
-                    println!(" D {}", path)
-                },
-                (WorkspaceStatus::Deleted, IndexStatus::Modified) => {
-                    println!(" MD {}", path)
-                },
-                (WorkspaceStatus::Deleted, IndexStatus::Deleted) => {
-                    println!(" DD {}", path)
-                },
-                (WorkspaceStatus::Modified, IndexStatus::Added) => {
-                    println!(" AM {}", path)
-                },
-                (WorkspaceStatus::Modified, IndexStatus::Default) => {
-                    println!(" M {}", path)
-                },
-                (WorkspaceStatus::Modified, IndexStatus::Modified) => {
-                    println!(" MM {}", path)
-                },
-                (WorkspaceStatus::Modified, IndexStatus::Deleted) => {
-                    println!(" DM {}", path)
-                },
-                (WorkspaceStatus::Default, IndexStatus::Default) => {
-                },
-                (WorkspaceStatus::Default, IndexStatus::Added) => {
-                    println!(" A {}", path)
-                },
-                (WorkspaceStatus::Default, IndexStatus::Modified) => {
-                    println!(" M {}", path)
-                },
-                (WorkspaceStatus::Default, IndexStatus::Deleted) => {
-                    println!(" D {}", path)
-                },
-            }
+        self.changed.iter().for_each(|path| {
+            let left = 
+                match self.index_changes.get(path){
+                    Some(IndexStatus::Added) => "A",
+                    Some(IndexStatus::Deleted) => "D",
+                    Some(IndexStatus::Modified) => "M",
+                    None => ""
+            };
+            let right =
+                match self.workspace_changes.get(path) {
+                    Some(WorkspaceStatus::Deleted) => "D",
+                    Some(WorkspaceStatus::Modified) => "M",
+                    None => ""
+                };
+            println!(" {}{} {}", left, right, path)
         });
         self.untracked.iter().for_each(|e| {
             println!("?? {}", e)
@@ -183,6 +167,71 @@ impl Status {
         Ok(res)
     }
 
+    pub fn record_change(&mut self, path: String, set: SetStatus) -> Result<()> {
+        self.changed.insert(path.to_string());
+        match set {
+            SetStatus::IndexSet(status) => {
+                self.index_changes.insert(path, status);
+            },
+            SetStatus::WorkspaceSet(status) => {
+                self.workspace_changes.insert(path, status);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn check_index_against_head_tree(&mut self, entry: &RefMut<EntryAdd>) -> Result<()> {
+        if self.head_tree.contains_key(&entry.get_path()) {
+            let head_entry = self.head_tree.get(&entry.get_path()).unwrap();
+            if !(util::get_mode_u(entry.get_mode()?) == head_entry.mode && entry.oid == head_entry.sha1_hash) {
+                let head_tree_status = IndexStatus::Modified;
+                self.record_change(entry.get_path(), SetStatus::IndexSet(head_tree_status))?;
+            }
+        } else {
+            let head_tree_status = IndexStatus::Added;
+            self.record_change(entry.get_path(), SetStatus::IndexSet(head_tree_status))?;
+        }
+        Ok(())
+    }
+
+    pub fn check_index_against_workspace(&mut self, entry: &mut RefMut<EntryAdd>) -> Result<bool> {
+        let stat = self.stat.get(&entry.get_path());
+        let mut changed_index: bool = false;
+        match stat {
+            Some(stat) => {
+                if !entry.is_stat_match(stat) {
+                    let workspace_status = WorkspaceStatus::Modified;
+                    self.record_change(entry.get_path(), SetStatus::WorkspaceSet(workspace_status))?;
+                    return Ok(changed_index);
+                } 
+
+                // we want to avoid whatever is possible to read a file's content
+                if entry.times_match(stat) {
+                    return Ok(changed_index);
+                }
+
+                let data = util::read_file(entry.path.to_path_buf())?;
+
+                let blob = Blob::new(data)?;
+
+                // if the file has not changed despite the previous checks, it is necessary to
+                // update index info for the next time.
+                if entry.oid == blob.get_oid()? {
+                    // println!("touched file: {:?}", entry);
+                    entry.update_entry_stat(stat);
+                    changed_index = true;
+                } else {
+                    let workspace_status = WorkspaceStatus::Modified;
+                    self.record_change(entry.get_path(), SetStatus::WorkspaceSet(workspace_status))?;
+                }
+            }
+            None => { 
+                let workspace_status = WorkspaceStatus::Deleted;
+                self.record_change(entry.get_path(), SetStatus::WorkspaceSet(workspace_status))?;
+            },
+        }
+        Ok(changed_index)
+    }
     pub fn check_index_entries(&mut self) -> Result<()> {
         let cmd = self.cmd.clone();
         let borrow = &mut *cmd.borrow_mut();
@@ -191,59 +240,8 @@ impl Status {
             let index = &borrow.index;
             let mut entries = index.each_mut_entry()?;
             while let Some(mut entry) = entries.pop() {
-                let mut head_tree_status = IndexStatus::Default; 
-                if self.head_tree.contains_key(&entry.get_path()) {
-                    let head_entry = self.head_tree.get(&entry.get_path()).unwrap();
-                    if !(util::get_mode_u(entry.get_mode()?) == head_entry.mode && entry.oid == head_entry.sha1_hash) {
-                        head_tree_status = IndexStatus::Modified
-                    }
-                } else {
-                    head_tree_status = IndexStatus::Added
-                }
-                let stat = self.stat.get(&entry.get_path());
-                match stat {
-                    Some(stat) => {
-                        if !entry.is_stat_match(stat) {
-                            let workspace_status = WorkspaceStatus::Modified;
-                            self.changed.insert(
-                                entry.get_path(), 
-                                (workspace_status, head_tree_status));
-                            continue;
-                        } 
-
-                        // we want to avoid whatever is possible to read a file's content
-                        if entry.times_match(stat) {
-                            let workspace_status = WorkspaceStatus::Default;
-                            self.changed.insert(
-                                entry.get_path(), 
-                                (workspace_status, head_tree_status));
-                            continue;
-                        }
-
-                        let data = util::read_file(entry.path.to_path_buf())?;
-
-                        let blob = Blob::new(data)?;
-
-                        // if the file has not changed despite the previous checks, it is necessary to
-                        // update index info for the next time.
-                        if entry.oid == blob.get_oid()? {
-                            // println!("touched file: {:?}", entry);
-                            entry.update_entry_stat(stat);
-                            changed_index = true;
-                        } else {
-                            let workspace_status = WorkspaceStatus::Modified;
-                            self.changed.insert(
-                                entry.get_path(), 
-                                (workspace_status, head_tree_status));
-                        }
-                        }
-                    None => { 
-                        let workspace_status = WorkspaceStatus::Deleted;
-                        self.changed.insert(
-                            entry.get_path(), 
-                            (workspace_status, head_tree_status));
-                    },
-                }
+                self.check_index_against_head_tree(&entry)?;
+                changed_index = self.check_index_against_workspace(&mut entry)?;
             };
         }
         if changed_index {
@@ -314,9 +312,12 @@ impl Status {
     fn collect_deleted_head_entries(&mut self) -> Result<()> {
         for (path, _) in self.head_tree.iter() {
             if !self.cmd.borrow().index.is_tracked_file(path) {
-                self.changed.insert(
-                    path.to_string(), 
-                    (WorkspaceStatus::Default, IndexStatus::Deleted));
+                self.changed.insert(path.to_string());
+                self.index_changes.insert(path.to_string(), IndexStatus::Deleted);
+                // self.record_change(path.to_string(), SetStatus::IndexSet(IndexStatus::Deleted))?;
+                // self.changed.insert(
+                //     path.to_string(), 
+                //     (WorkspaceStatus::Default, IndexStatus::Deleted));
             }
         }
         Ok(())
